@@ -6,6 +6,26 @@
     <title></title>
   </head>
   <body>
+    <div class="motion--control">
+      <label class="motion--label" for="motion-slowdown-slider">Motion slowdown</label>
+      <div class="motion--row">
+        <input
+          id="motion-slowdown-slider"
+          class="motion--slider"
+          data-motion-slider
+          type="range"
+          min="1"
+          max="6"
+          step="0.1"
+          value="1"
+          aria-valuemin="1"
+          aria-valuemax="6"
+          aria-valuenow="1"
+          aria-label="Global motion slowdown"
+        />
+        <output class="motion--value" data-motion-value for="motion-slowdown-slider">1.0x</output>
+      </div>
+    </div>
     <div class="browser" data-resizable>
       <div class="tab--row">
         <img src="/public/mac-controls.svg" alt="Mac controls" width="52" height="12" />
@@ -13,6 +33,11 @@
           <div class="tab--item tab--active" role="tab" aria-selected="true" tabindex="0">
             <span class="tab--favicon" aria-hidden="true">S</span>
             <span class="tab--label">Starbucks Coffee Company</span>
+            <button class="tab--close" type="button" aria-label="Close tab"></button>
+          </div>
+          <div class="tab--item tab--inactive" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab--favicon" aria-hidden="true">S</span>
+            <span class="tab--label">Breckenreid Makes Thoughtful Product Decisions</span>
             <button class="tab--close" type="button" aria-label="Close tab"></button>
           </div>
           <div class="tab--item tab--inactive" role="tab" aria-selected="false" tabindex="-1">
