@@ -118,6 +118,37 @@ body
     flex: 1 1 auto
     min-width: 0
 
+.tab--add
+  flex: 0 0 32px
+  align-self: center
+  width: 32px
+  height: 32px
+  margin-left: 4px
+  border: 0
+  border-radius: 8px
+  background: transparent
+  padding: 0
+  color: var(--icons-secondary)
+  cursor: pointer
+  position: relative
+  transition: background-color var(--motion-transition-standard), color var(--motion-transition-standard)
+
+  &::before
+    content: ''
+    position: absolute
+    inset: 0
+    background-color: currentColor
+    -webkit-mask: url('/public/plus.svg') center / 15px 15px no-repeat
+    mask: url('/public/plus.svg') center / 15px 15px no-repeat
+
+  &:hover
+    background: var(--t-container-fill--tertiary)
+    color: var(--icons-primary)
+
+  &:focus-visible
+    outline: 2px solid #00000033
+    outline-offset: -2px
+
 .tab--item
   position: relative
   z-index: 0
