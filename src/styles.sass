@@ -17,11 +17,12 @@ body
   min-height: 100vh
   background: #1E1E1E
 
-.resizable-panel
+.browser
   --panel-default-width: 800px
   --panel-default-height: 480px
   --panel-min-width: 120px
   --panel-min-height: 80px
+
   position: fixed
   left: calc(50vw - var(--panel-default-width) / 2)
   top: calc(50vh - var(--panel-default-height) / 2)
@@ -31,7 +32,121 @@ body
   min-height: var(--panel-min-height)
   border-radius: 16px
   background: var(--bg-surface-backdrop)
+  padding-top: 4px
   contain: layout paint
   cursor: grab
   touch-action: none
   will-change: left, top, width, height
+
+  .tabs
+    height: 40px
+    display: flex
+    flex-direction: row
+    align-items: center
+    padding: 0 14px;
+    gap: 8px
+    overflow: visible
+
+  .tabs-container
+    display: flex
+    align-items: flex-end
+    min-width: 0
+
+  .bar
+    height: 60px
+    background: var(--bg-surface)
+    border-top-left-radius: 16px
+    border-top-right-radius: 16px
+
+  .body
+    height: 100%
+    background: var(--bg-container)
+    box-shadow: 0 0 0 1px var(--border-primary)
+
+
+.tab
+  position: relative
+  display: flex
+  align-items: center
+  gap: 8px
+  width: 244px
+  height: 40px
+  padding: 12px 14px
+  border: 0
+  border-radius: 12px 12px 0 0
+  background: var(--bg-surface)
+  color: var(--text-primary)
+  font-family: "SF Pro Text", "SF Pro", "Segoe UI", sans-serif
+  font-size: 13px
+  line-height: 1
+  font-feature-settings: "case" 1
+  overflow: visible
+
+  &::before,
+  &::after
+    content: ''
+    position: absolute
+    bottom: 0
+    width: 12px
+    height: 12px
+    pointer-events: none
+
+  &::before
+    left: -12px
+    background: radial-gradient(circle at top left, transparent 12px, var(--bg-surface) 12px)
+
+  &::after
+    right: -12px
+    background: radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px)
+
+  .favicon
+    flex: 0 0 16px
+    width: 16px
+    height: 16px
+    border-radius: 999px
+    background: linear-gradient(180deg, #16a767 0%, #00754a 100%)
+    color: #ffffff
+    display: grid
+    place-items: center
+    font-size: 9px
+    font-weight: 600
+    letter-spacing: 0.01em
+    user-select: none
+
+  .label
+    flex: 1 1 auto
+    min-width: 0
+    overflow: hidden
+    text-overflow: ellipsis
+    white-space: nowrap
+
+  .close
+    position: relative
+    flex: 0 0 16px
+    width: 16px
+    height: 16px
+    border: 0
+    border-radius: 5px
+    background: transparent
+    padding: 0
+    color: var(--icons-secondary)
+    cursor: pointer
+
+    &:hover
+      background: var(--bg-button-tertiary)
+
+    &::before,
+    &::after
+      content: ''
+      position: absolute
+      top: 7px
+      left: 4px
+      width: 8px
+      height: 1px
+      background: currentColor
+
+    &::before
+      transform: rotate(45deg)
+
+    &::after
+      transform: rotate(-45deg)
