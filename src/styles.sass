@@ -151,27 +151,44 @@ body
     bottom: 4px
     left: 4px
     border-radius: 8px
+    opacity: 0
+    background: var(--t-container-fill--tertiary)
     pointer-events: none
     z-index: 0
-    transition: top var(--motion-transition-standard), right var(--motion-transition-standard), bottom var(--motion-transition-standard), left var(--motion-transition-standard), border-radius var(--motion-transition-standard), background-color var(--motion-transition-standard), box-shadow var(--motion-transition-standard)
+    transition: opacity var(--motion-transition-standard)
 
-  &::after
-    content: ''
+  .tab--shape
     position: absolute
-    left: -12px
-    right: -12px
+    top: 0
+    right: 0
     bottom: 0
-    height: 12px
+    left: 0
+    border-radius: 12px 12px 0 0
+    background: var(--bg-surface)
     opacity: 0
     transform: translateY(12px)
-    -webkit-clip-path: inset(100% 0 0 0)
-    clip-path: inset(100% 0 0 0)
-    background: radial-gradient(circle at top left, transparent 12px, var(--bg-surface) 12px) left bottom / 12px 12px no-repeat, radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px) right bottom / 12px 12px no-repeat
     pointer-events: none
     z-index: 0
-    transition: opacity var(--motion-transition-standard), transform var(--motion-transition-standard), -webkit-clip-path var(--motion-transition-standard), clip-path var(--motion-transition-standard)
+    transition: opacity var(--motion-transition-standard), transform var(--motion-transition-standard)
 
-  > *
+    &::before,
+    &::after
+      content: ''
+      position: absolute
+      bottom: 0
+      width: 12px
+      height: 12px
+      pointer-events: none
+
+    &::before
+      left: -12px
+      background: radial-gradient(circle at top left, transparent 12px, var(--bg-surface) 12px)
+
+    &::after
+      right: -12px
+      background: radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px)
+
+  > :not(.tab--shape)
     position: relative
     z-index: 1
 
@@ -181,7 +198,7 @@ body
     --label-fade-size: 24px
 
     &::before
-      background: var(--t-container-fill--tertiary)
+      opacity: 1
 
   &.tab--active
     z-index: 1
@@ -189,20 +206,9 @@ body
     --label-close-space: 20px
     --label-fade-size: 24px
 
-    &::before
-      top: 0
-      right: 0
-      bottom: 0
-      left: 0
-      border-radius: 12px 12px 0 0
-      background: var(--bg-surface)
-      box-shadow: none
-
-    &::after
+    .tab--shape
       opacity: 1
       transform: translateY(0)
-      -webkit-clip-path: inset(0 0 0 0)
-      clip-path: inset(0 0 0 0)
 
   &:focus-visible
     outline: 2px solid #00000033
