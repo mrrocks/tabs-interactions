@@ -9,6 +9,10 @@
   --icons-secondary: #00000099
   --border-primary: #0000000f
   --t-container-fill--tertiary: rgba(0, 0, 0, 0.06)
+  
+  --motion-duration-standard: 180ms
+  --motion-ease-standard: ease
+  --motion-transition-standard: var(--motion-duration-standard) var(--motion-ease-standard)
 
 @property --label-fade-size
   syntax: '<length>'
@@ -51,7 +55,7 @@ body
   touch-action: none
   will-change: left, top, width, height
 
-  .tabs
+  .tab--row
     height: 40px
     display: flex
     flex-direction: row
@@ -59,12 +63,6 @@ body
     padding: 0 14px;
     gap: 8px
     overflow: visible
-
-  .tabs-container
-    display: flex
-    align-items: flex-end
-    flex: 1 1 auto
-    min-width: 0
 
   .bar
     height: 60px
@@ -78,11 +76,13 @@ body
     box-shadow: 0 0 0 1px var(--border-primary)
 
 
-.tabs-container
-  display: flex
-  align-items: flex-end
+.tab--list
+    display: flex
+    align-items: flex-end
+    flex: 1 1 auto
+    min-width: 0
 
-.tab
+.tab--item
   position: relative
   --label-close-space: 0px
   --label-fade-size: 12px
@@ -104,7 +104,7 @@ body
   font-feature-settings: "case" 1
   overflow: visible
   cursor: pointer
-  transition: color 180ms ease
+  transition: color var(--motion-transition-standard)
 
   &::before
     content: ''
@@ -116,7 +116,7 @@ body
     border-radius: 8px
     pointer-events: none
     z-index: 0
-    transition: top 180ms ease, right 180ms ease, bottom 180ms ease, left 180ms ease, border-radius 180ms ease, background-color 180ms ease, box-shadow 180ms ease
+    transition: top var(--motion-transition-standard), right var(--motion-transition-standard), bottom var(--motion-transition-standard), left var(--motion-transition-standard), border-radius var(--motion-transition-standard), background-color var(--motion-transition-standard), box-shadow var(--motion-transition-standard)
 
   &::after
     content: ''
@@ -129,13 +129,13 @@ body
     background: radial-gradient(circle at top left, transparent 12px, var(--bg-surface) 12px) left bottom / 12px 12px no-repeat, radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px) right bottom / 12px 12px no-repeat
     pointer-events: none
     z-index: 0
-    transition: opacity 180ms ease
+    transition: opacity var(--motion-transition-standard)
 
   > *
     position: relative
     z-index: 1
 
-  &:hover:not([aria-selected="true"])
+  &.tab--inactive:hover
     color: var(--text-primary)
     --label-close-space: 20px
     --label-fade-size: 24px
@@ -143,7 +143,7 @@ body
     &::before
       background: var(--t-container-fill--tertiary)
 
-  &[aria-selected="true"]
+  &.tab--active
     color: var(--text-primary)
     --label-close-space: 20px
     --label-fade-size: 24px
@@ -164,7 +164,7 @@ body
     outline: 2px solid #00000033
     outline-offset: -2px
 
-  .favicon
+  .tab--favicon
     flex: 0 0 16px
     width: 16px
     height: 16px
@@ -178,7 +178,7 @@ body
     letter-spacing: 0.01em
     user-select: none
 
-  .label
+  .tab--label
     flex: 1 1 auto
     min-width: 0
     padding-right: var(--label-close-space)
@@ -187,9 +187,10 @@ body
     white-space: nowrap
     -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--label-close-space) - var(--label-fade-size)), transparent calc(100% - var(--label-close-space)), transparent 100%)
     mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--label-close-space) - var(--label-fade-size)), transparent calc(100% - var(--label-close-space)), transparent 100%)
-    transition: padding-right 180ms ease, --label-close-space 180ms ease, --label-fade-size 180ms ease
+    transition: padding-right var(--motion-transition-standard), --label-close-space var(--motion-transition-standard), --label-fade-size var(--motion-transition-standard)
+    user-select: none
 
-  .close
+  .tab--close
     position: absolute
     top: 50%
     right: 14px
@@ -204,7 +205,7 @@ body
     opacity: 0
     pointer-events: none
     cursor: pointer
-    transition: opacity 180ms ease, color 180ms ease, background-color 180ms ease
+    transition: opacity var(--motion-transition-standard), color var(--motion-transition-standard), background-color var(--motion-transition-standard)
 
     &::before
       content: ''
@@ -218,7 +219,7 @@ body
       background: var(--bg-button-tertiary)
       color: var(--icons-primary)
 
-  &[aria-selected="true"] .close,
-  &:hover:not([aria-selected="true"]) .close
+  &.tab--active .tab--close,
+  &.tab--inactive:hover .tab--close
     opacity: 1
     pointer-events: auto

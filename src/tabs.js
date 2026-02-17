@@ -1,8 +1,22 @@
-import { getArrowTargetIndex, getInitialActiveIndex, getTabActivationState } from './tabState';
+import {
+  activeTabClassName,
+  getArrowTargetIndex,
+  getInitialActiveIndex,
+  getTabActivationState,
+  inactiveTabClassName
+} from './tabState';
 
-const getTabs = (tabList) => Array.from(tabList.querySelectorAll('[role="tab"]'));
+export const tabListSelector = '.tab--list';
+export const tabSelector = '.tab--item';
 
-const setActiveTab = (tabList, tabIndex, shouldFocus = false) => {
+const closeButtonSelector = '.tab--close';
+
+const getTabs = (tabList) => Array.from(tabList.querySelectorAll(tabSelector));
+
+const isEventTargetElement = (target) =>
+  Boolean(target) && typeof target === 'object' && typeof target.closest === 'function';
+
+export const setActiveTab = (tabList, tabIndex, shouldFocus = false) => {
   const tabs = getTabs(tabList);
 
   if (tabs.length === 0) {
@@ -14,6 +28,8 @@ const setActiveTab = (tabList, tabIndex, shouldFocus = false) => {
 
   tabs.forEach((tab, index) => {
     const state = nextState[index];
+    tab.classList.remove(activeTabClassName, inactiveTabClassName);
+    tab.classList.add(state.stateClassName);
     tab.setAttribute('aria-selected', state.selected ? 'true' : 'false');
     tab.tabIndex = state.tabIndex;
     if (state.selected) {
@@ -27,7 +43,7 @@ const setActiveTab = (tabList, tabIndex, shouldFocus = false) => {
 };
 
 export const initializeTabs = () => {
-  const tabList = document.querySelector('.tabs-container[role="tablist"]');
+  const tabList = document.querySelector(tabListSelector);
 
   if (!tabList) {
     return;
@@ -40,21 +56,21 @@ export const initializeTabs = () => {
   }
 
   const initialActiveIndex = getInitialActiveIndex(
-    tabs.map((tab) => tab.getAttribute('aria-selected') === 'true')
+    tabs.map((tab) => tab.classList.contains(activeTabClassName))
   );
 
   setActiveTab(tabList, initialActiveIndex);
 
   tabList.addEventListener('click', (event) => {
-    if (!(event.target instanceof Element)) {
+    if (!isEventTargetElement(event.target)) {
       return;
     }
 
-    if (event.target.closest('.close')) {
+    if (event.target.closest(closeButtonSelector)) {
       return;
     }
 
-    const tab = event.target.closest('[role="tab"]');
+    const tab = event.target.closest(tabSelector);
 
     if (!tab || !tabList.contains(tab)) {
       return;
@@ -70,11 +86,11 @@ export const initializeTabs = () => {
   });
 
   tabList.addEventListener('keydown', (event) => {
-    if (!(event.target instanceof Element)) {
+    if (!isEventTargetElement(event.target)) {
       return;
     }
 
-    const tab = event.target.closest('[role="tab"]');
+    const tab = event.target.closest(tabSelector);
 
     if (!tab || !tabList.contains(tab)) {
       return;

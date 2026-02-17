@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getArrowTargetIndex, getInitialActiveIndex, getTabActivationState } from './tabState';
+import {
+  activeTabClassName,
+  getArrowTargetIndex,
+  getInitialActiveIndex,
+  getTabActivationState,
+  inactiveTabClassName
+} from './tabState';
 
 describe('getInitialActiveIndex', () => {
   it('returns the first selected index when multiple tabs are marked active', () => {
@@ -14,16 +20,16 @@ describe('getInitialActiveIndex', () => {
 describe('getTabActivationState', () => {
   it('produces a single active tab with roving tabindex', () => {
     expect(getTabActivationState(3, 1)).toEqual([
-      { selected: false, tabIndex: -1 },
-      { selected: true, tabIndex: 0 },
-      { selected: false, tabIndex: -1 }
+      { selected: false, tabIndex: -1, stateClassName: inactiveTabClassName },
+      { selected: true, tabIndex: 0, stateClassName: activeTabClassName },
+      { selected: false, tabIndex: -1, stateClassName: inactiveTabClassName }
     ]);
   });
 
   it('clamps activation index to a valid tab', () => {
     expect(getTabActivationState(2, 9)).toEqual([
-      { selected: false, tabIndex: -1 },
-      { selected: true, tabIndex: 0 }
+      { selected: false, tabIndex: -1, stateClassName: inactiveTabClassName },
+      { selected: true, tabIndex: 0, stateClassName: activeTabClassName }
     ]);
   });
 });

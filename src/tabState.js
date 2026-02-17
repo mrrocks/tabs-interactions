@@ -6,6 +6,9 @@ const clampIndex = (index, tabCount) => {
   return Math.min(Math.max(index, 0), tabCount - 1);
 };
 
+export const activeTabClassName = 'tab--active';
+export const inactiveTabClassName = 'tab--inactive';
+
 export const getInitialActiveIndex = (selectionState) => {
   if (!Array.isArray(selectionState) || selectionState.length === 0) {
     return 0;
@@ -23,10 +26,15 @@ export const getTabActivationState = (tabCount, activeIndex) => {
 
   const resolvedIndex = clampIndex(activeIndex, tabCount);
 
-  return Array.from({ length: tabCount }, (_, index) => ({
-    selected: index === resolvedIndex,
-    tabIndex: index === resolvedIndex ? 0 : -1
-  }));
+  return Array.from({ length: tabCount }, (_, index) => {
+    const selected = index === resolvedIndex;
+
+    return {
+      selected,
+      tabIndex: selected ? 0 : -1,
+      stateClassName: selected ? activeTabClassName : inactiveTabClassName
+    };
+  });
 };
 
 export const getArrowTargetIndex = ({ currentIndex, key, tabCount }) => {

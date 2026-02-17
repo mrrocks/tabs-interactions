@@ -266,7 +266,7 @@ export const initializePanelInteractions = () => {
       return;
     }
 
-    if (event.target instanceof Element && event.target.closest('[role="tab"]')) {
+    if (event.target instanceof Element && event.target.closest('.tab--item')) {
       return;
     }
 
