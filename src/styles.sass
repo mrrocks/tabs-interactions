@@ -10,6 +10,16 @@
   --border-primary: #0000000f
   --t-container-fill--tertiary: rgba(0, 0, 0, 0.06)
 
+@property --label-fade-size
+  syntax: '<length>'
+  inherits: true
+  initial-value: 0px
+
+@property --label-close-space
+  syntax: '<length>'
+  inherits: true
+  initial-value: 0px
+
 *
   box-sizing: border-box
 
@@ -74,6 +84,8 @@ body
 
 .tab
   position: relative
+  --label-close-space: 0px
+  --label-fade-size: 12px
   display: flex
   align-items: center
   gap: 8px
@@ -125,12 +137,16 @@ body
 
   &:hover:not([aria-selected="true"])
     color: var(--text-primary)
+    --label-close-space: 20px
+    --label-fade-size: 24px
 
     &::before
       background: var(--t-container-fill--tertiary)
 
   &[aria-selected="true"]
     color: var(--text-primary)
+    --label-close-space: 20px
+    --label-fade-size: 24px
 
     &::before
       top: 0
@@ -165,13 +181,19 @@ body
   .label
     flex: 1 1 auto
     min-width: 0
+    padding-right: var(--label-close-space)
     overflow: hidden
-    text-overflow: ellipsis
+    text-overflow: clip
     white-space: nowrap
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--label-close-space) - var(--label-fade-size)), transparent calc(100% - var(--label-close-space)), transparent 100%)
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--label-close-space) - var(--label-fade-size)), transparent calc(100% - var(--label-close-space)), transparent 100%)
+    transition: padding-right 180ms ease, --label-close-space 180ms ease, --label-fade-size 180ms ease
 
   .close
-    position: relative
-    flex: 0 0 16px
+    position: absolute
+    top: 50%
+    right: 14px
+    transform: translateY(-50%)
     width: 16px
     height: 16px
     border: 0
@@ -179,28 +201,24 @@ body
     background: transparent
     padding: 0
     color: var(--icons-secondary)
+    opacity: 0
+    pointer-events: none
     cursor: pointer
-    transition: color 180ms ease, background-color 180ms ease
+    transition: opacity 180ms ease, color 180ms ease, background-color 180ms ease
+
+    &::before
+      content: ''
+      position: absolute
+      inset: 0
+      background-color: currentColor
+      -webkit-mask: url('/public/x.svg') center / 7px 7px no-repeat
+      mask: url('/public/x.svg') center / 7px 7px no-repeat
 
     &:hover
       background: var(--bg-button-tertiary)
-
-    &::before,
-    &::after
-      content: ''
-      position: absolute
-      top: 7px
-      left: 4px
-      width: 8px
-      height: 1px
-      background: currentColor
-
-    &::before
-      transform: rotate(45deg)
-
-    &::after
-      transform: rotate(-45deg)
+      color: var(--icons-primary)
 
   &[aria-selected="true"] .close,
   &:hover:not([aria-selected="true"]) .close
-    color: var(--icons-primary)
+    opacity: 1
+    pointer-events: auto
