@@ -8,6 +8,7 @@
   --icons-primary: #000000d6
   --icons-secondary: #00000099
   --border-primary: #0000000f
+  --t-container-fill--tertiary: rgba(0, 0, 0, 0.06)
 
 *
   box-sizing: border-box
@@ -22,6 +23,8 @@ body
   --panel-default-height: 480px
   --panel-min-width: 120px
   --panel-min-height: 80px
+  --tab-default-width: 244px
+  --tab-min-width: 140px
 
   position: fixed
   left: calc(50vw - var(--panel-default-width) / 2)
@@ -50,6 +53,7 @@ body
   .tabs-container
     display: flex
     align-items: flex-end
+    flex: 1 1 auto
     min-width: 0
 
   .bar
@@ -64,40 +68,85 @@ body
     box-shadow: 0 0 0 1px var(--border-primary)
 
 
+.tabs-container
+  display: flex
+  align-items: flex-end
+
 .tab
   position: relative
   display: flex
   align-items: center
   gap: 8px
-  width: 244px
+  flex: 0 1 var(--tab-default-width)
+  min-width: var(--tab-min-width)
+  max-width: var(--tab-default-width)
   height: 40px
   padding: 12px 14px
   border: 0
-  border-radius: 12px 12px 0 0
-  background: var(--bg-surface)
-  color: var(--text-primary)
+  border-radius: 12px
+  background: transparent
+  color: var(--text-secondary)
   font-family: "SF Pro Text", "SF Pro", "Segoe UI", sans-serif
   font-size: 13px
   line-height: 1
   font-feature-settings: "case" 1
   overflow: visible
+  cursor: pointer
+  transition: color 180ms ease
 
-  &::before,
+  &::before
+    content: ''
+    position: absolute
+    top: 4px
+    right: 4px
+    bottom: 4px
+    left: 4px
+    border-radius: 8px
+    pointer-events: none
+    z-index: 0
+    transition: top 180ms ease, right 180ms ease, bottom 180ms ease, left 180ms ease, border-radius 180ms ease, background-color 180ms ease, box-shadow 180ms ease
+
   &::after
     content: ''
     position: absolute
-    bottom: 0
-    width: 12px
-    height: 12px
-    pointer-events: none
-
-  &::before
     left: -12px
-    background: radial-gradient(circle at top left, transparent 12px, var(--bg-surface) 12px)
-
-  &::after
     right: -12px
-    background: radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px)
+    bottom: 0
+    height: 12px
+    opacity: 0
+    background: radial-gradient(circle at top left, transparent 12px, var(--bg-surface) 12px) left bottom / 12px 12px no-repeat, radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px) right bottom / 12px 12px no-repeat
+    pointer-events: none
+    z-index: 0
+    transition: opacity 180ms ease
+
+  > *
+    position: relative
+    z-index: 1
+
+  &:hover:not([aria-selected="true"])
+    color: var(--text-primary)
+
+    &::before
+      background: var(--t-container-fill--tertiary)
+
+  &[aria-selected="true"]
+    color: var(--text-primary)
+
+    &::before
+      top: 0
+      right: 0
+      bottom: 0
+      left: 0
+      border-radius: 12px 12px 0 0
+      background: var(--bg-surface)
+      box-shadow: none
+
+    &::after
+      opacity: 1
+
+  &:focus-visible
+    outline: 2px solid #00000033
+    outline-offset: -2px
 
   .favicon
     flex: 0 0 16px
@@ -131,6 +180,7 @@ body
     padding: 0
     color: var(--icons-secondary)
     cursor: pointer
+    transition: color 180ms ease, background-color 180ms ease
 
     &:hover
       background: var(--bg-button-tertiary)
@@ -150,3 +200,7 @@ body
 
     &::after
       transform: rotate(-45deg)
+
+  &[aria-selected="true"] .close,
+  &:hover:not([aria-selected="true"]) .close
+    color: var(--icons-primary)
