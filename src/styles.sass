@@ -1,0 +1,37 @@
+:root
+  --bg-surface: #f2f2f2
+  --bg-surface-backdrop: #e0e0e0
+  --bg-container: #ffffff
+  --bg-button-tertiary: #0000000f
+  --text-primary: #000000f5
+  --text-secondary: #00000099
+  --icons-primary: #000000d6
+  --icons-secondary: #00000099
+  --border-primary: #0000000f
+
+*
+  box-sizing: border-box
+
+body
+  margin: 0
+  min-height: 100vh
+  background: #1E1E1E
+
+.resizable-panel
+  --panel-default-width: 800px
+  --panel-default-height: 480px
+  --panel-min-width: 120px
+  --panel-min-height: 80px
+  position: fixed
+  left: calc(50vw - var(--panel-default-width) / 2)
+  top: calc(50vh - var(--panel-default-height) / 2)
+  width: var(--panel-default-width)
+  height: var(--panel-default-height)
+  min-width: var(--panel-min-width)
+  min-height: var(--panel-min-height)
+  border-radius: 16px
+  background: var(--bg-surface-backdrop)
+  contain: layout paint
+  cursor: grab
+  touch-action: none
+  will-change: left, top, width, height
