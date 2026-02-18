@@ -27,7 +27,6 @@ export const verticalResistanceFactor = 0.22;
 export const verticalResistanceMaxPx = 30;
 const dragProxySettleDurationMs = 140;
 const dragResizeTransitionDurationMs = 110;
-const detachSourceCollapseDurationMs = 150;
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -261,6 +260,7 @@ export const initializeTabDrag = ({
   let hoverAttachPreviewTab = null;
   let hoverAttachPreviewTabList = null;
   let dragVisualResizeTransitionEnabled = false;
+  let detachPlaceholder = null;
 
   const clearGlobalListeners = () => {
     window.removeEventListener('pointermove', onPointerMove);
@@ -373,7 +373,6 @@ export const initializeTabDrag = ({
     session.draggedTab.style.flexBasis = `${baseWidthPx}px`;
     session.draggedTab.style.minWidth = `${baseWidthPx}px`;
     session.draggedTab.style.maxWidth = `${baseWidthPx}px`;
-    session.draggedTab.style.padding = '';
   };
 
   const syncDragVisualWidthWithHoverPreview = (session) => {
@@ -389,18 +388,51 @@ export const initializeTabDrag = ({
     applyDragVisualWidth(session, previewWidthPx);
   };
 
-  const applyDetachSourceWidthTransition = (shouldCollapse) => {
-    const { draggedTab, lockedTabWidthPx } = dragState;
-    const durationMs = scaleDurationMs(detachSourceCollapseDurationMs);
-    const widthPx = shouldCollapse ? 0 : lockedTabWidthPx;
+  const createDetachPlaceholder = (tabList, draggedTab, widthPx) => {
+    if (typeof document === 'undefined') {
+      return null;
+    }
+    const el = document.createElement('div');
+    el.setAttribute('aria-hidden', 'true');
+    const durationMs = scaleDurationMs(150);
     const ease = `${durationMs}ms ease`;
-    draggedTab.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}, padding ${ease}`;
-    draggedTab.style.overflow = 'hidden';
-    draggedTab.getBoundingClientRect();
-    draggedTab.style.flex = `0 0 ${widthPx}px`;
-    draggedTab.style.minWidth = `${widthPx}px`;
-    draggedTab.style.maxWidth = `${widthPx}px`;
-    draggedTab.style.padding = shouldCollapse ? '0' : '';
+    el.style.flex = `0 0 ${widthPx}px`;
+    el.style.minWidth = `${widthPx}px`;
+    el.style.maxWidth = `${widthPx}px`;
+    el.style.height = '0';
+    el.style.overflow = 'hidden';
+    el.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}`;
+    tabList.insertBefore(el, draggedTab);
+    return el;
+  };
+
+  const setPlaceholderWidth = (el, widthPx) => {
+    el.style.flex = `0 0 ${widthPx}px`;
+    el.style.minWidth = `${widthPx}px`;
+    el.style.maxWidth = `${widthPx}px`;
+  };
+
+  const removeDetachPlaceholder = () => {
+    if (!detachPlaceholder) {
+      return;
+    }
+    detachPlaceholder.remove();
+    detachPlaceholder = null;
+  };
+
+  const applyDetachSourceWidthTransition = (shouldCollapse) => {
+    const { draggedTab, currentTabList, lockedTabWidthPx } = dragState;
+    if (shouldCollapse) {
+      if (!detachPlaceholder) {
+        detachPlaceholder = createDetachPlaceholder(currentTabList, draggedTab, lockedTabWidthPx);
+      }
+      if (detachPlaceholder) {
+        detachPlaceholder.getBoundingClientRect();
+        setPlaceholderWidth(detachPlaceholder, 0);
+      }
+    } else if (detachPlaceholder) {
+      setPlaceholderWidth(detachPlaceholder, lockedTabWidthPx);
+    }
   };
 
   const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
@@ -496,6 +528,7 @@ export const initializeTabDrag = ({
     sourceWindowRemovedDuringDetach = false;
     dragVisualResizeTransitionEnabled = false;
     clearGlobalListeners();
+    removeDetachPlaceholder();
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = completedState.initialUserSelect;
@@ -704,14 +737,7 @@ export const initializeTabDrag = ({
 
     if (!attachTarget) {
       clearHoverAttachPreview();
-      const insideSourceHeader = isPointerInsideCurrentHeader({
-        tabList: sourceTabList,
-        clientX,
-        clientY
-      });
-      if (insideSourceHeader) {
-        resetDragVisualWidth(dragState);
-      }
+      resetDragVisualWidth(dragState);
       return false;
     }
 
@@ -871,9 +897,7 @@ export const initializeTabDrag = ({
         minWidth: draggedTab.style.minWidth,
         maxWidth: draggedTab.style.maxWidth,
         willChange: draggedTab.style.willChange,
-        zIndex: draggedTab.style.zIndex,
-        padding: draggedTab.style.padding,
-        overflow: draggedTab.style.overflow
+        zIndex: draggedTab.style.zIndex
       }
     });
 

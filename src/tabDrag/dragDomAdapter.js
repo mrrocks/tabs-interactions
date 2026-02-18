@@ -120,8 +120,6 @@ export const createDragDomAdapter = ({
     draggedTab.style.maxWidth = initialInlineStyles.maxWidth;
     draggedTab.style.willChange = initialInlineStyles.willChange;
     draggedTab.style.zIndex = initialInlineStyles.zIndex;
-    draggedTab.style.padding = initialInlineStyles.padding;
-    draggedTab.style.overflow = initialInlineStyles.overflow;
   };
 
   const rebaseDragVisualAtPointer = (dragState, clientX, clientY) => {
