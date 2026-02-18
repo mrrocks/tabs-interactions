@@ -27,6 +27,7 @@ export const verticalResistanceFactor = 0.22;
 export const verticalResistanceMaxPx = 30;
 const dragProxySettleDurationMs = 140;
 const dragResizeTransitionDurationMs = 110;
+const detachSourceCollapseDurationMs = 150;
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -372,6 +373,7 @@ export const initializeTabDrag = ({
     session.draggedTab.style.flexBasis = `${baseWidthPx}px`;
     session.draggedTab.style.minWidth = `${baseWidthPx}px`;
     session.draggedTab.style.maxWidth = `${baseWidthPx}px`;
+    session.draggedTab.style.padding = '';
   };
 
   const syncDragVisualWidthWithHoverPreview = (session) => {
@@ -388,17 +390,17 @@ export const initializeTabDrag = ({
   };
 
   const applyDetachSourceWidthTransition = (shouldCollapse) => {
-    const { draggedTab, currentTabList, lockedTabWidthPx } = dragState;
-    const siblings = getTabs(currentTabList).filter((t) => t !== draggedTab);
-    const beforeLefts = siblings.map((t) => t.getBoundingClientRect().left);
+    const { draggedTab, lockedTabWidthPx } = dragState;
+    const durationMs = scaleDurationMs(detachSourceCollapseDurationMs);
     const widthPx = shouldCollapse ? 0 : lockedTabWidthPx;
+    const ease = `${durationMs}ms ease`;
+    draggedTab.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}, padding ${ease}`;
+    draggedTab.style.overflow = 'hidden';
+    draggedTab.getBoundingClientRect();
     draggedTab.style.flex = `0 0 ${widthPx}px`;
     draggedTab.style.minWidth = `${widthPx}px`;
     draggedTab.style.maxWidth = `${widthPx}px`;
-    const displacements = siblings
-      .map((tab, i) => ({ tab, deltaX: beforeLefts[i] - tab.getBoundingClientRect().left }))
-      .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
-    animationCoordinator.animateSiblingDisplacement(displacements);
+    draggedTab.style.padding = shouldCollapse ? '0' : '';
   };
 
   const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
@@ -702,7 +704,14 @@ export const initializeTabDrag = ({
 
     if (!attachTarget) {
       clearHoverAttachPreview();
-      resetDragVisualWidth(dragState);
+      const insideSourceHeader = isPointerInsideCurrentHeader({
+        tabList: sourceTabList,
+        clientX,
+        clientY
+      });
+      if (insideSourceHeader) {
+        resetDragVisualWidth(dragState);
+      }
       return false;
     }
 
@@ -862,7 +871,9 @@ export const initializeTabDrag = ({
         minWidth: draggedTab.style.minWidth,
         maxWidth: draggedTab.style.maxWidth,
         willChange: draggedTab.style.willChange,
-        zIndex: draggedTab.style.zIndex
+        zIndex: draggedTab.style.zIndex,
+        padding: draggedTab.style.padding,
+        overflow: draggedTab.style.overflow
       }
     });
 
