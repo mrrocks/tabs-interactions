@@ -27,6 +27,7 @@ export const verticalResistanceFactor = 0.22;
 export const verticalResistanceMaxPx = 30;
 const dragProxySettleDurationMs = 140;
 const dragResizeTransitionDurationMs = 110;
+const detachCollapseDurationMs = 150;
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -261,6 +262,7 @@ export const initializeTabDrag = ({
   let hoverAttachPreviewTabList = null;
   let dragVisualResizeTransitionEnabled = false;
   let detachPlaceholder = null;
+  let detachPlaceholderCollapsed = false;
 
   const clearGlobalListeners = () => {
     window.removeEventListener('pointermove', onPointerMove);
@@ -351,7 +353,7 @@ export const initializeTabDrag = ({
   };
 
   const resetDragVisualWidth = (session) => {
-    if (!session) {
+    if (!session?.dragProxy) {
       return;
     }
 
@@ -363,16 +365,9 @@ export const initializeTabDrag = ({
       return;
     }
 
-    if (session.dragProxy) {
-      session.dragProxy.style.width = `${baseWidthPx}px`;
-      session.dragProxy.style.minWidth = `${baseWidthPx}px`;
-      session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
-    }
-
-    session.draggedTab.style.flex = `0 0 ${baseWidthPx}px`;
-    session.draggedTab.style.flexBasis = `${baseWidthPx}px`;
-    session.draggedTab.style.minWidth = `${baseWidthPx}px`;
-    session.draggedTab.style.maxWidth = `${baseWidthPx}px`;
+    session.dragProxy.style.width = `${baseWidthPx}px`;
+    session.dragProxy.style.minWidth = `${baseWidthPx}px`;
+    session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
   };
 
   const syncDragVisualWidthWithHoverPreview = (session) => {
@@ -388,25 +383,7 @@ export const initializeTabDrag = ({
     applyDragVisualWidth(session, previewWidthPx);
   };
 
-  const createDetachPlaceholder = (tabList, draggedTab, widthPx) => {
-    if (typeof document === 'undefined') {
-      return null;
-    }
-    const el = document.createElement('div');
-    el.setAttribute('aria-hidden', 'true');
-    const durationMs = scaleDurationMs(150);
-    const ease = `${durationMs}ms ease`;
-    el.style.flex = `0 0 ${widthPx}px`;
-    el.style.minWidth = `${widthPx}px`;
-    el.style.maxWidth = `${widthPx}px`;
-    el.style.height = '0';
-    el.style.overflow = 'hidden';
-    el.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}`;
-    tabList.insertBefore(el, draggedTab);
-    return el;
-  };
-
-  const setPlaceholderWidth = (el, widthPx) => {
+  const setFlexWidth = (el, widthPx) => {
     el.style.flex = `0 0 ${widthPx}px`;
     el.style.minWidth = `${widthPx}px`;
     el.style.maxWidth = `${widthPx}px`;
@@ -418,20 +395,41 @@ export const initializeTabDrag = ({
     }
     detachPlaceholder.remove();
     detachPlaceholder = null;
+    detachPlaceholderCollapsed = false;
   };
 
-  const applyDetachSourceWidthTransition = (shouldCollapse) => {
+  const ensurePlaceholder = (tabList, draggedTab, widthPx) => {
+    if (detachPlaceholder) {
+      return;
+    }
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const el = document.createElement('div');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.overflow = 'hidden';
+    el.style.height = '0';
+    setFlexWidth(el, widthPx);
+    draggedTab.style.display = 'none';
+    tabList.insertBefore(el, draggedTab);
+    detachPlaceholder = el;
+  };
+
+  const syncDetachPlaceholder = (shouldCollapse) => {
     const { draggedTab, currentTabList, lockedTabWidthPx } = dragState;
     if (shouldCollapse) {
-      if (!detachPlaceholder) {
-        detachPlaceholder = createDetachPlaceholder(currentTabList, draggedTab, lockedTabWidthPx);
-      }
-      if (detachPlaceholder) {
+      ensurePlaceholder(currentTabList, draggedTab, lockedTabWidthPx);
+      if (detachPlaceholder && !detachPlaceholderCollapsed) {
+        detachPlaceholderCollapsed = true;
         detachPlaceholder.getBoundingClientRect();
-        setPlaceholderWidth(detachPlaceholder, 0);
+        const durationMs = scaleDurationMs(detachCollapseDurationMs);
+        const ease = `${durationMs}ms ease`;
+        detachPlaceholder.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}`;
+        setFlexWidth(detachPlaceholder, 0);
       }
-    } else if (detachPlaceholder) {
-      setPlaceholderWidth(detachPlaceholder, lockedTabWidthPx);
+    } else if (detachPlaceholder && detachPlaceholderCollapsed) {
+      detachPlaceholderCollapsed = false;
+      setFlexWidth(detachPlaceholder, lockedTabWidthPx);
     }
   };
 
@@ -528,7 +526,10 @@ export const initializeTabDrag = ({
     sourceWindowRemovedDuringDetach = false;
     dragVisualResizeTransitionEnabled = false;
     clearGlobalListeners();
-    removeDetachPlaceholder();
+    if (detachPlaceholder) {
+      completedState.draggedTab.style.display = '';
+      removeDetachPlaceholder();
+    }
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = completedState.initialUserSelect;
@@ -684,9 +685,13 @@ export const initializeTabDrag = ({
         }
       }
 
-      if (!isLastTab && dragState.detachIntentActive !== dragState.prevDetachIntentActive) {
-        applyDetachSourceWidthTransition(dragState.detachIntentActive);
-        dragState.prevDetachIntentActive = dragState.detachIntentActive;
+      if (!isLastTab && dragState.detachIntentActive) {
+        const insideHeader = isPointerInsideCurrentHeader({
+          tabList: dragState.currentTabList,
+          clientX,
+          clientY
+        });
+        syncDetachPlaceholder(!insideHeader);
       }
     }
 
