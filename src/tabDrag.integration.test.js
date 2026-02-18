@@ -495,7 +495,9 @@ describe('tab drag integration flows', () => {
         left: 0,
         top: 0,
         width: tabWidthPx,
+        tabIndex: 0,
         setAttribute: () => {},
+        addEventListener: () => {},
         closest: (selector) => {
           if (selector === '.tab--list') {
             return element.parentNode;
