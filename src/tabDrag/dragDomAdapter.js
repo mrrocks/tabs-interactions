@@ -4,7 +4,6 @@ export const createDragDomAdapter = ({
   activeDragClassName,
   inactiveDragClassName,
   dragSourceClassName,
-  dragSourceVisibleClassName,
   dragProxyClassName
 }) => {
   const toRectSnapshot = (rect) => ({
@@ -89,6 +88,7 @@ export const createDragDomAdapter = ({
   const applyDragStyles = (dragState) => {
     const { draggedTab } = dragState;
     const draggedRect = draggedTab.getBoundingClientRect();
+    dragState.lockedTabWidthPx = draggedRect.width;
     draggedTab.style.transition = 'none';
     draggedTab.style.flex = `0 0 ${draggedRect.width}px`;
     draggedTab.style.minWidth = `${draggedRect.width}px`;
@@ -112,7 +112,6 @@ export const createDragDomAdapter = ({
     const { draggedTab, initialInlineStyles } = dragState;
 
     draggedTab.classList.remove(dragSourceClassName);
-    draggedTab.classList.remove(dragSourceVisibleClassName);
     draggedTab.classList.remove(dragClassName, activeDragClassName, inactiveDragClassName);
     draggedTab.style.transform = initialInlineStyles.transform;
     draggedTab.style.transition = initialInlineStyles.transition;
@@ -154,7 +153,6 @@ export const createDragDomAdapter = ({
     restoreDraggedTabStyles,
     rebaseDragVisualAtPointer,
     removeDragProxy,
-    cleanupVisualState,
-    dragSourceVisibleClassName
+    cleanupVisualState
   };
 };

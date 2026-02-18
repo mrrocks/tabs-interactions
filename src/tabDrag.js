@@ -32,7 +32,6 @@ const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
 const inactiveDragClassName = 'tab--dragging-inactive';
 const dragSourceClassName = 'tab--drag-source';
-const dragSourceVisibleClassName = 'tab--drag-source-visible';
 const dragProxyClassName = 'tab--drag-proxy';
 const dragHoverPreviewClassName = 'tab--drag-hover-preview';
 const bodyDraggingClassName = 'body--tab-dragging';
@@ -235,7 +234,6 @@ export const initializeTabDrag = ({
     activeDragClassName,
     inactiveDragClassName,
     dragSourceClassName,
-    dragSourceVisibleClassName,
     dragProxyClassName
   });
   const animationCoordinator = createAnimationCoordinator({
@@ -387,6 +385,20 @@ export const initializeTabDrag = ({
     }
 
     applyDragVisualWidth(session, previewWidthPx);
+  };
+
+  const applyDetachSourceWidthTransition = (shouldCollapse) => {
+    const { draggedTab, currentTabList, lockedTabWidthPx } = dragState;
+    const siblings = getTabs(currentTabList).filter((t) => t !== draggedTab);
+    const beforeLefts = siblings.map((t) => t.getBoundingClientRect().left);
+    const widthPx = shouldCollapse ? 0 : lockedTabWidthPx;
+    draggedTab.style.flex = `0 0 ${widthPx}px`;
+    draggedTab.style.minWidth = `${widthPx}px`;
+    draggedTab.style.maxWidth = `${widthPx}px`;
+    const displacements = siblings
+      .map((tab, i) => ({ tab, deltaX: beforeLefts[i] - tab.getBoundingClientRect().left }))
+      .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
+    animationCoordinator.animateSiblingDisplacement(displacements);
   };
 
   const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
@@ -637,10 +649,10 @@ export const initializeTabDrag = ({
         }
       }
 
-      dragState.draggedTab.classList.toggle(
-        dragDomAdapter.dragSourceVisibleClassName,
-        dragState.detachIntentActive && !isLastTab
-      );
+      if (!isLastTab && dragState.detachIntentActive !== dragState.prevDetachIntentActive) {
+        applyDetachSourceWidthTransition(dragState.detachIntentActive);
+        dragState.prevDetachIntentActive = dragState.detachIntentActive;
+      }
     }
 
     const visualOffsetY = resolveDragVisualOffsetY({
