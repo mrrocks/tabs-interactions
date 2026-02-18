@@ -1,5 +1,6 @@
 import { scaleDurationMs } from './motionSpeed';
 import { createWindowControlsElement, windowControlsSelector } from './windowControls';
+import { bringToFront } from './windowFocus';
 
 const defaultDetachAnchorX = 180;
 const defaultDetachAnchorY = 20;
@@ -194,6 +195,7 @@ export const createDetachedWindow = ({
   applyPanelFrame(panel, frame);
   const mountTarget = sourcePanel.parentElement ?? document.body;
   mountTarget.append(panel);
+  bringToFront(panel);
   moveTabToList({ tab: draggedTab, tabList });
 
   return {

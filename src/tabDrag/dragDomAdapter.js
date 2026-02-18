@@ -1,3 +1,5 @@
+import { getOverlayZIndex } from '../windowFocus';
+
 export const createDragDomAdapter = ({
   activeTabClassName,
   dragClassName,
@@ -38,6 +40,7 @@ export const createDragDomAdapter = ({
     dragProxy.style.maxWidth = `${draggedRect.width}px`;
     dragProxy.style.transform = 'translate3d(0px, 0px, 0px)';
     dragProxy.style.willChange = 'transform';
+    dragProxy.style.zIndex = String(getOverlayZIndex());
     document.body.append(dragProxy);
 
     return {

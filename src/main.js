@@ -4,8 +4,10 @@ import { initializePanelInteraction, initializePanelInteractions } from './panel
 import { initializeTabDrag } from './tabDrag';
 import { initializeTabList, initializeTabs } from './tabs';
 import { initializeWindowControls } from './windowControls';
+import { initializeWindowFocus } from './windowFocus';
 
 initializeMotionSlowdownControl();
+initializeWindowFocus();
 initializeWindowControls();
 initializeTabs();
 initializePanelInteractions();
