@@ -3,24 +3,19 @@ import { activeTabClassName } from './tabState';
 import { getTabs, setActiveTab, tabListSelector, tabSelector } from './tabs';
 import {
   animateDetachedWindowFromTab,
-  applyPanelFrame,
-  computeDetachedPanelFrame,
   createDetachedWindow,
-  moveTabToList,
-  removeDetachedWindowIfEmpty
+  moveTabToList
 } from './windowManager';
 import { removePanel } from './windowControls';
 import {
   createDragSession,
   isSessionAttachedDrag,
-  isSessionDetachedDrag,
   markSessionAsActivated,
   transitionSessionToAttachedDrag,
   transitionSessionToSettling
 } from './tabDrag/dragSessionStateMachine';
 import { createLayoutPipeline } from './tabDrag/layoutPipeline';
-import { createDropResolver } from './tabDrag/dropResolver';
-import { createWindowLifecycle } from './tabDrag/windowLifecycle';
+import { createDropResolver, isPointInsideRect } from './tabDrag/dropResolver';
 import { createAnimationCoordinator } from './tabDrag/animationCoordinator';
 import { createDragDomAdapter } from './tabDrag/dragDomAdapter';
 
@@ -79,23 +74,6 @@ export const getInsertionIndexFromCenters = ({ centers, pointerClientX }) => {
 const isEventTargetElement = (target) =>
   Boolean(target) && typeof target === 'object' && typeof target.closest === 'function';
 
-const createRect = (rect, padding) => ({
-  left: rect.left - padding,
-  right: rect.right + padding,
-  top: rect.top - padding,
-  bottom: rect.bottom + padding
-});
-
-export const isPointInsideRect = ({ clientX, clientY, rect, padding = 0 }) => {
-  const resolvedRect = createRect(rect, padding);
-  return (
-    clientX >= resolvedRect.left &&
-    clientX <= resolvedRect.right &&
-    clientY >= resolvedRect.top &&
-    clientY <= resolvedRect.bottom
-  );
-};
-
 export const shouldDetachOnDrop = ({ detachIntentActive }) => Boolean(detachIntentActive);
 export const resolveDetachIntent = ({ currentIntent, deltaY, thresholdPx = detachThresholdPx }) =>
   Boolean(currentIntent) || shouldDetachFromVerticalDelta(deltaY, thresholdPx);
@@ -115,29 +93,14 @@ export const resolveSourceActivationIndexAfterDetach = (draggedTabIndex, remaini
 export const resolveDragVisualOffsetY = ({ deltaY, detachIntentActive }) =>
   detachIntentActive ? deltaY : applyVerticalResistance(deltaY);
 
-export const resolveHoverPreviewWidthPx = ({ dragProxyBaseRect, dragProxy, draggedTab }) => {
+export const resolveHoverPreviewWidthPx = ({ dragProxyBaseRect, draggedTab }) => {
   const proxyBaseWidth = toFiniteNumber(dragProxyBaseRect?.width, 0);
   if (proxyBaseWidth > 0) {
     return proxyBaseWidth;
   }
 
-  if (dragProxy && typeof dragProxy.getBoundingClientRect === 'function') {
-    const proxyWidth = toFiniteNumber(dragProxy.getBoundingClientRect().width, 0);
-    if (proxyWidth > 0) {
-      return proxyWidth;
-    }
-  }
-
   if (draggedTab && typeof draggedTab.getBoundingClientRect === 'function') {
-    const tabWidth = toFiniteNumber(draggedTab.getBoundingClientRect().width, 0);
-    if (tabWidth > 0) {
-      return tabWidth;
-    }
-  }
-
-  const styleMinWidth = toFiniteNumber(Number.parseFloat(draggedTab?.style?.minWidth ?? ''), 0);
-  if (styleMinWidth > 0) {
-    return styleMinWidth;
+    return toFiniteNumber(draggedTab.getBoundingClientRect().width, 0);
   }
 
   return 0;
@@ -278,7 +241,6 @@ export const initializeTabDrag = ({
   const animationCoordinator = createAnimationCoordinator({
     scaleDurationMs,
     getProxySettleDelta,
-    animateDetachedWindowFromTab,
     dragProxySettleDurationMs
   });
   const layoutPipeline = createLayoutPipeline({
@@ -291,17 +253,6 @@ export const initializeTabDrag = ({
     tabListSelector,
     defaultAttachPaddingPx: reentryPaddingPx
   });
-  const windowLifecycle = createWindowLifecycle({
-    getTabs,
-    createDetachedWindow,
-    removeDetachedWindowIfEmpty,
-    removePanel,
-    shouldCloseSourcePanelAfterTransfer,
-    initializePanelInteraction,
-    initializeTabList,
-    animateDetachedWindowEnter: animationCoordinator.animateDetachedWindowEnter
-  });
-
   let dragState = null;
   let frameRequestId = 0;
   let queuedClientX = 0;
@@ -438,11 +389,6 @@ export const initializeTabDrag = ({
     applyDragVisualWidth(session, previewWidthPx);
   };
 
-  const clearHoverPreviewAndResetDragWidth = (session) => {
-    clearHoverAttachPreview();
-    resetDragVisualWidth(session);
-  };
-
   const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
     layoutPipeline.beginFrame();
     const moveResult = layoutPipeline.moveTabToPointerPosition({
@@ -551,7 +497,8 @@ export const initializeTabDrag = ({
     }
 
     if (!completedState.dragStarted) {
-      clearHoverPreviewAndResetDragWidth(completedState);
+      clearHoverAttachPreview();
+      resetDragVisualWidth(completedState);
       return;
     }
 
@@ -572,42 +519,6 @@ export const initializeTabDrag = ({
 
       animationCoordinator.finalizeOnAnimationSettled(settleAnimation, cleanupVisualState);
     };
-
-    if (isSessionDetachedDrag(completedState) && completedState.detachedPanel) {
-      const resolvedAttachTarget = dropResolver.resolveAttachTargetTabList({
-        clientX: completedState.lastClientX,
-        clientY: completedState.lastClientY,
-        excludedTabList: completedState.currentTabList,
-        padding: windowAttachPaddingPx
-      });
-      const attachTarget = resolveDropAttachTarget({
-        attachTargetTabList: resolvedAttachTarget,
-        hoverAttachTabList: completedState.hoverAttachTabList,
-        sourceTabList: completedState.currentTabList,
-        dropClientX: completedState.lastClientX,
-        dropClientY: completedState.lastClientY,
-        hoverAttachClientX: completedState.hoverAttachClientX,
-        hoverAttachClientY: completedState.hoverAttachClientY
-      });
-
-      if (attachTarget) {
-        commitDropAttach({
-          draggedTab: completedState.draggedTab,
-          attachTargetTabList: attachTarget,
-          pointerClientX: completedState.lastClientX
-        });
-        removePanel(completedState.detachedPanel);
-      }
-
-      clearHoverAttachPreview();
-      settleVisualState();
-
-      if (completedState.dragMoved) {
-        suppressNextTabClick();
-      }
-
-      return;
-    }
 
     const sourceTabList = completedState.currentTabList;
     const sourcePanel =
@@ -649,26 +560,31 @@ export const initializeTabDrag = ({
         attachTargetTabList,
         pointerClientX: completedState.lastClientX
       });
-      windowLifecycle.closeSourcePanelIfEmpty({
-        sourcePanel,
-        sourceTabList
-      });
+      if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
+        removePanel(sourcePanel);
+      }
       activateInSource?.();
     } else if (dropDestination === 'detach' && sourceTabList && sourcePanel) {
       const sourceTabRect = dragDomAdapter.toRectSnapshot(completedState.draggedTab.getBoundingClientRect());
       const activateInSource = captureSourceActivation(completedState.draggedTab, sourceTabList);
-      const detachedWindow = windowLifecycle.createDetachedWindowFromDrop({
+      const detachedWindow = createDetachedWindow({
         sourcePanel,
         sourceTabList,
         draggedTab: completedState.draggedTab,
         pointerClientX: completedState.lastClientX,
-        pointerClientY: completedState.lastClientY,
-        sourceTabRect
+        pointerClientY: completedState.lastClientY
       });
 
       if (detachedWindow) {
+        initializePanelInteraction(detachedWindow.panel);
+        initializeTabList(detachedWindow.tabList);
+        if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
+          removePanel(sourcePanel);
+        }
+        animateDetachedWindowFromTab({ panel: detachedWindow.panel, tabRect: sourceTabRect, frame: detachedWindow.frame });
         activateInSource?.();
-        clearHoverPreviewAndResetDragWidth(completedState);
+        clearHoverAttachPreview();
+        resetDragVisualWidth(completedState);
         cleanupVisualState();
 
         if (completedState.dragMoved) {
@@ -753,37 +669,6 @@ export const initializeTabDrag = ({
     }
   };
 
-  const attachToTabList = (nextTabList, clientX, clientY) => {
-    if (!dragState || !isSessionDetachedDrag(dragState) || !dragState.detachedPanel || !nextTabList) {
-      return;
-    }
-
-    moveTabWithLayoutPipeline({
-      tabList: nextTabList,
-      draggedTab: dragState.draggedTab,
-      pointerClientX: clientX
-    });
-
-    activateDraggedTabInTarget(dragState.draggedTab, nextTabList);
-    windowLifecycle.maybeRemoveDetachedPanel(dragState.detachedPanel);
-    dragState = transitionSessionToAttachedDrag(dragState, {
-      currentTabList: nextTabList,
-      sourceTabCount: getTabs(nextTabList).length,
-      detachIntentActive: false,
-      reattachArmed: false,
-      didCrossWindowAttach: true,
-      hoverAttachTabList: null,
-      hoverAttachClientX: 0,
-      hoverAttachClientY: 0,
-      detachedPanel: null,
-      detachedPanelWidth: 0,
-      detachedPanelHeight: 0,
-      detachedAnchorOffsetX: 0,
-      detachedAnchorOffsetY: 0
-    });
-    dragDomAdapter.rebaseDragVisualAtPointer(dragState, clientX, clientY);
-  };
-
   const attachToHoveredTabListFromAttachedDrag = (clientX, clientY) => {
     if (!dragState || !isSessionAttachedDrag(dragState)) {
       return false;
@@ -804,7 +689,8 @@ export const initializeTabDrag = ({
     }
 
     if (!attachTarget) {
-      clearHoverPreviewAndResetDragWidth(dragState);
+      clearHoverAttachPreview();
+      resetDragVisualWidth(dragState);
       return false;
     }
 
@@ -824,42 +710,6 @@ export const initializeTabDrag = ({
     }
 
     return true;
-  };
-
-  const applyDetachedDragSample = (clientX, clientY) => {
-    if (!dragState || !dragState.detachedPanel) {
-      return;
-    }
-
-    const deltaX = clientX - dragState.startX;
-    const deltaY = clientY - dragState.startY;
-    dragDomAdapter.setDragVisualTransform(dragState, deltaX, deltaY);
-
-    const frame = computeDetachedPanelFrame({
-      pointerClientX: clientX,
-      pointerClientY: clientY,
-      panelWidth: dragState.detachedPanelWidth,
-      panelHeight: dragState.detachedPanelHeight,
-      anchorOffsetX: dragState.detachedAnchorOffsetX,
-      anchorOffsetY: dragState.detachedAnchorOffsetY
-    });
-    applyPanelFrame(dragState.detachedPanel, frame);
-
-    const attachTarget = dropResolver.resolveAttachTargetTabList({
-      clientX,
-      clientY,
-      excludedTabList: dragState.currentTabList,
-      padding: reentryPaddingPx
-    });
-    if (attachTarget) {
-      dragState.hoverAttachTabList = attachTarget;
-      dragState.hoverAttachClientX = clientX;
-      dragState.hoverAttachClientY = clientY;
-    }
-
-    if (attachTarget) {
-      attachToTabList(attachTarget, clientX, clientY);
-    }
   };
 
   const startDragIfNeeded = (clientX, clientY) => {
@@ -899,9 +749,7 @@ export const initializeTabDrag = ({
       return;
     }
 
-    if (isSessionDetachedDrag(dragState)) {
-      applyDetachedDragSample(clientX, clientY);
-    } else if (isSessionAttachedDrag(dragState)) {
+    if (isSessionAttachedDrag(dragState)) {
       applyAttachedDragSample(clientX, clientY);
     }
   };

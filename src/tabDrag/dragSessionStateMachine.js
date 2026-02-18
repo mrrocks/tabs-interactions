@@ -1,8 +1,6 @@
 export const dragSessionPhase = Object.freeze({
-  idle: 'idle',
   pressed: 'pressed',
   attachedDrag: 'attachedDrag',
-  detachedDrag: 'detachedDrag',
   settling: 'settling'
 });
 
@@ -26,11 +24,6 @@ export const createDragSession = ({
   currentTabList,
   phase: dragSessionPhase.pressed,
   sourceTabCount,
-  detachedPanel: null,
-  detachedPanelWidth: 0,
-  detachedPanelHeight: 0,
-  detachedAnchorOffsetX: 0,
-  detachedAnchorOffsetY: 0,
   reattachArmed: true,
   dragProxy: null,
   dragProxyBaseRect: null,
@@ -61,18 +54,6 @@ export const transitionSessionToAttachedDrag = (session, updates = {}) => {
   };
 };
 
-export const transitionSessionToDetachedDrag = (session, updates = {}) => {
-  if (!session) {
-    return null;
-  }
-
-  return {
-    ...session,
-    ...updates,
-    phase: dragSessionPhase.detachedDrag
-  };
-};
-
 export const transitionSessionToSettling = (session) => {
   if (!session) {
     return null;
@@ -96,4 +77,3 @@ export const markSessionAsActivated = (session) => {
 };
 
 export const isSessionAttachedDrag = (session) => session?.phase === dragSessionPhase.attachedDrag;
-export const isSessionDetachedDrag = (session) => session?.phase === dragSessionPhase.detachedDrag;

@@ -57,49 +57,21 @@ describe('resolveDragVisualOffsetY', () => {
 });
 
 describe('resolveHoverPreviewWidthPx', () => {
-  it('prefers drag proxy base width when available', () => {
+  it('prefers drag proxy base rect width when available', () => {
     expect(
       resolveHoverPreviewWidthPx({
         dragProxyBaseRect: { width: 132 },
-        draggedTab: {
-          style: { minWidth: '120px' },
-          getBoundingClientRect: () => ({ width: 0 })
-        }
+        draggedTab: { getBoundingClientRect: () => ({ width: 120 }) }
       })
     ).toBe(132);
   });
 
-  it('falls back to drag proxy or dragged tab width when source is detached', () => {
+  it('falls back to dragged tab bounding width when base rect is absent', () => {
     expect(
       resolveHoverPreviewWidthPx({
-        dragProxy: {
-          getBoundingClientRect: () => ({ width: 128 })
-        },
-        draggedTab: {
-          style: { minWidth: '120px' },
-          getBoundingClientRect: () => ({ width: 0 })
-        }
-      })
-    ).toBe(128);
-    expect(
-      resolveHoverPreviewWidthPx({
-        dragProxy: {
-          getBoundingClientRect: () => ({ width: 0 })
-        },
-        draggedTab: {
-          style: { minWidth: '120px' },
-          getBoundingClientRect: () => ({ width: 124 })
-        }
+        draggedTab: { getBoundingClientRect: () => ({ width: 124 }) }
       })
     ).toBe(124);
-    expect(
-      resolveHoverPreviewWidthPx({
-        draggedTab: {
-          style: { minWidth: '120px' },
-          getBoundingClientRect: () => ({ width: 0 })
-        }
-      })
-    ).toBe(120);
   });
 });
 

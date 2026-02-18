@@ -1,7 +1,6 @@
 export const createAnimationCoordinator = ({
   scaleDurationMs,
   getProxySettleDelta,
-  animateDetachedWindowFromTab,
   dragProxySettleDurationMs = 140,
   siblingDisplacementDurationMs = 150
 }) => {
@@ -86,18 +85,9 @@ export const createAnimationCoordinator = ({
     animation.addEventListener('cancel', settle);
   };
 
-  const animateDetachedWindowEnter = ({ panel, tabRect, frame }) => {
-    animateDetachedWindowFromTab({
-      panel,
-      tabRect,
-      frame
-    });
-  };
-
   return {
     animateSiblingDisplacement,
     animateProxySettleToTarget,
-    finalizeOnAnimationSettled,
-    animateDetachedWindowEnter
+    finalizeOnAnimationSettled
   };
 };

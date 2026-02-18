@@ -3,7 +3,6 @@ import { shouldCloseSourcePanelAfterTransfer } from './tabDrag';
 import { initializeTabDrag } from './tabDrag';
 import { createLayoutPipeline } from './tabDrag/layoutPipeline';
 import { createDropResolver } from './tabDrag/dropResolver';
-import { createWindowLifecycle } from './tabDrag/windowLifecycle';
 
 const tabWidth = 120;
 const tabHeight = 40;
@@ -162,125 +161,6 @@ const createLayoutPipelineHarness = () =>
   });
 
 describe('tab drag integration flows', () => {
-  it('creates detached window on drop outside tab lists and closes empty source window', () => {
-    const sourceTabList = createTabList(['tab-a']);
-    const sourcePanel = createPanel(sourceTabList);
-    const detachedTabList = createTabList([]);
-    const detachedPanel = createPanel(detachedTabList);
-    const initializePanelInteraction = vi.fn();
-    const initializeTabList = vi.fn();
-    const animateDetachedWindowEnter = vi.fn();
-    const removePanel = vi.fn((panel) => {
-      panel.remove();
-      return true;
-    });
-    const createDetachedWindow = vi.fn(({ draggedTab }) => {
-      detachedTabList.insertBefore(draggedTab, null);
-
-      return {
-        panel: detachedPanel,
-        tabList: detachedTabList,
-        frame: {
-          left: 400,
-          top: 240,
-          width: 320,
-          height: 200
-        }
-      };
-    });
-
-    const lifecycle = createWindowLifecycle({
-      getTabs: (tabList) => tabList.tabs.slice(),
-      createDetachedWindow,
-      removeDetachedWindowIfEmpty: () => false,
-      removePanel,
-      shouldCloseSourcePanelAfterTransfer,
-      initializePanelInteraction,
-      initializeTabList,
-      animateDetachedWindowEnter
-    });
-
-    const sourceTabRect = {
-      left: 24,
-      top: 20,
-      width: tabWidth,
-      height: tabHeight
-    };
-    const detachedWindow = lifecycle.createDetachedWindowFromDrop({
-      sourcePanel,
-      sourceTabList,
-      draggedTab: sourceTabList.tabs[0],
-      pointerClientX: 500,
-      pointerClientY: 320,
-      sourceTabRect
-    });
-
-    expect(detachedWindow).toBeTruthy();
-    expect(createDetachedWindow).toHaveBeenCalledOnce();
-    expect(initializePanelInteraction).toHaveBeenCalledWith(detachedPanel);
-    expect(initializeTabList).toHaveBeenCalledWith(detachedTabList);
-    expect(animateDetachedWindowEnter).toHaveBeenCalledWith({
-      panel: detachedPanel,
-      tabRect: sourceTabRect,
-      frame: detachedWindow.frame
-    });
-    expect(removePanel).toHaveBeenCalledWith(sourcePanel);
-    expect(sourcePanel.removed).toBe(true);
-    expect(detachedTabList.tabs).toHaveLength(1);
-  });
-
-  it('attaches detached tab to a target window on hover and removes empty detached window', () => {
-    const detachedTabList = createTabList(['tab-a'], { left: 40, top: 20 });
-    const targetTabList = createTabList(['tab-b', 'tab-c'], { left: 400, top: 20 });
-    const detachedPanel = createPanel(detachedTabList);
-    const dropResolver = createDropResolver({
-      tabListSelector: '.tab--list',
-      defaultAttachPaddingPx: 16
-    });
-    const layoutPipeline = createLayoutPipelineHarness();
-    const documentRef = {
-      querySelectorAll: () => [detachedTabList, targetTabList],
-      elementsFromPoint: () => [targetTabList]
-    };
-    const lifecycle = createWindowLifecycle({
-      getTabs: (tabList) => tabList.tabs.slice(),
-      createDetachedWindow: () => null,
-      removeDetachedWindowIfEmpty: (panel) => {
-        if (panel.querySelector('.tab--list').tabs.length > 0) {
-          return false;
-        }
-
-        panel.remove();
-        return true;
-      },
-      removePanel: () => true,
-      shouldCloseSourcePanelAfterTransfer,
-      initializePanelInteraction: () => {},
-      initializeTabList: () => {},
-      animateDetachedWindowEnter: () => {}
-    });
-
-    const attachTarget = dropResolver.resolveAttachTargetTabList({
-      clientX: 460,
-      clientY: 30,
-      excludedTabList: detachedTabList,
-      documentRef
-    });
-    layoutPipeline.beginFrame();
-    layoutPipeline.moveTabToPointerPosition({
-      tabList: attachTarget,
-      draggedTab: detachedTabList.tabs[0],
-      pointerClientX: 460
-    });
-    const removed = lifecycle.maybeRemoveDetachedPanel(detachedPanel);
-
-    expect(attachTarget).toBe(targetTabList);
-    expect(removed).toBe(true);
-    expect(detachedPanel.removed).toBe(true);
-    expect(targetTabList.tabs.map((tab) => tab.id)).toContain('tab-a');
-    expect(detachedTabList.tabs).toHaveLength(0);
-  });
-
   it('resolves attach target from panel hover region', () => {
     const sourceTabList = createTabList(['tab-a'], { left: 40, top: 20 });
     const targetTabList = createTabList(['tab-b', 'tab-c'], { left: 400, top: 20 });
@@ -330,59 +210,6 @@ describe('tab drag integration flows', () => {
     });
 
     expect(attachTarget).toBeNull();
-  });
-
-  it('closes source window when the last tab leaves', () => {
-    const sourceTabList = createTabList([]);
-    const sourcePanel = createPanel(sourceTabList);
-    const removePanel = vi.fn((panel) => {
-      panel.remove();
-      return true;
-    });
-    const lifecycle = createWindowLifecycle({
-      getTabs: (tabList) => tabList.tabs.slice(),
-      createDetachedWindow: () => null,
-      removeDetachedWindowIfEmpty: () => false,
-      removePanel,
-      shouldCloseSourcePanelAfterTransfer,
-      initializePanelInteraction: () => {},
-      initializeTabList: () => {},
-      animateDetachedWindowEnter: () => {}
-    });
-
-    const didClose = lifecycle.closeSourcePanelIfEmpty({
-      sourcePanel,
-      sourceTabList
-    });
-
-    expect(didClose).toBe(true);
-    expect(removePanel).toHaveBeenCalledWith(sourcePanel);
-    expect(sourcePanel.removed).toBe(true);
-  });
-
-  it('keeps source window when tabs remain after transfer', () => {
-    const sourceTabList = createTabList(['tab-a']);
-    const sourcePanel = createPanel(sourceTabList);
-    const removePanel = vi.fn(() => true);
-    const lifecycle = createWindowLifecycle({
-      getTabs: (tabList) => tabList.tabs.slice(),
-      createDetachedWindow: () => null,
-      removeDetachedWindowIfEmpty: () => false,
-      removePanel,
-      shouldCloseSourcePanelAfterTransfer,
-      initializePanelInteraction: () => {},
-      initializeTabList: () => {},
-      animateDetachedWindowEnter: () => {}
-    });
-
-    const didClose = lifecycle.closeSourcePanelIfEmpty({
-      sourcePanel,
-      sourceTabList
-    });
-
-    expect(didClose).toBe(false);
-    expect(removePanel).not.toHaveBeenCalled();
-    expect(sourcePanel.removed).toBe(false);
   });
 
   it('reorders tabs and yields sibling displacement for hover space-making', () => {
@@ -705,6 +532,7 @@ describe('tab drag integration flows', () => {
         style: {
           userSelect: ''
         },
+        classList: createClassList(),
         append: () => {}
       },
       createElement: () => createDocumentElementStub(),
@@ -969,6 +797,7 @@ describe('tab drag integration flows', () => {
         style: {
           userSelect: ''
         },
+        classList: createClassList(),
         append: () => {}
       },
       querySelectorAll: (selector) => (selector === '.tab--list' ? [tabList] : []),
