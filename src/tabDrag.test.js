@@ -8,6 +8,8 @@ import {
   resolveDropDetachIntent,
   resolveDropAttachTarget,
   resolveDragVisualOffsetY,
+  resolveHoverPreviewWidthPx,
+  resolveSourceActivationIndexAfterDetach,
   shouldCloseSourcePanelAfterTransfer,
   shouldDetachFromVerticalDelta,
   shouldDetachOnDrop,
@@ -51,6 +53,53 @@ describe('resolveDragVisualOffsetY', () => {
   it('uses resistance before detach intent and raw delta after', () => {
     expect(resolveDragVisualOffsetY({ deltaY: 80, detachIntentActive: false })).toBe(applyVerticalResistance(80));
     expect(resolveDragVisualOffsetY({ deltaY: 80, detachIntentActive: true })).toBe(80);
+  });
+});
+
+describe('resolveHoverPreviewWidthPx', () => {
+  it('prefers drag proxy base width when available', () => {
+    expect(
+      resolveHoverPreviewWidthPx({
+        dragProxyBaseRect: { width: 132 },
+        draggedTab: {
+          style: { minWidth: '120px' },
+          getBoundingClientRect: () => ({ width: 0 })
+        }
+      })
+    ).toBe(132);
+  });
+
+  it('falls back to drag proxy or dragged tab width when source is detached', () => {
+    expect(
+      resolveHoverPreviewWidthPx({
+        dragProxy: {
+          getBoundingClientRect: () => ({ width: 128 })
+        },
+        draggedTab: {
+          style: { minWidth: '120px' },
+          getBoundingClientRect: () => ({ width: 0 })
+        }
+      })
+    ).toBe(128);
+    expect(
+      resolveHoverPreviewWidthPx({
+        dragProxy: {
+          getBoundingClientRect: () => ({ width: 0 })
+        },
+        draggedTab: {
+          style: { minWidth: '120px' },
+          getBoundingClientRect: () => ({ width: 124 })
+        }
+      })
+    ).toBe(124);
+    expect(
+      resolveHoverPreviewWidthPx({
+        draggedTab: {
+          style: { minWidth: '120px' },
+          getBoundingClientRect: () => ({ width: 0 })
+        }
+      })
+    ).toBe(120);
   });
 });
 
@@ -227,5 +276,19 @@ describe('resolveDropDetachIntent', () => {
         didCrossWindowAttach: true
       })
     ).toBe(false);
+  });
+});
+
+describe('resolveSourceActivationIndexAfterDetach', () => {
+  it('activates the previous tab when the middle tab is detached', () => {
+    expect(resolveSourceActivationIndexAfterDetach(2, 3)).toBe(1);
+  });
+
+  it('activates index 0 when the first tab is detached', () => {
+    expect(resolveSourceActivationIndexAfterDetach(0, 2)).toBe(0);
+  });
+
+  it('returns -1 when no tabs remain after detach', () => {
+    expect(resolveSourceActivationIndexAfterDetach(0, 0)).toBe(-1);
   });
 });

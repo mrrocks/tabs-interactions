@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { shouldCloseSourcePanelAfterTransfer } from './tabDrag';
+import { initializeTabDrag } from './tabDrag';
 import { createLayoutPipeline } from './tabDrag/layoutPipeline';
 import { createDropResolver } from './tabDrag/dropResolver';
 import { createWindowLifecycle } from './tabDrag/windowLifecycle';
@@ -415,5 +416,598 @@ describe('tab drag integration flows', () => {
 
     const maxMeasureCalls = Math.max(...tabList.tabs.map((tab) => tab.measureCalls));
     expect(maxMeasureCalls).toBeLessThanOrEqual(2);
+  });
+
+  it('keeps cross-window hover as preview until pointer release', () => {
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+
+    const createClassList = (initialNames = []) => {
+      const names = new Set(initialNames);
+      return {
+        add: (...classNames) => {
+          classNames.forEach((name) => names.add(name));
+        },
+        remove: (...classNames) => {
+          classNames.forEach((name) => names.delete(name));
+        },
+        contains: (className) => names.has(className),
+        toggle: (className, force) => {
+          if (force === true) {
+            names.add(className);
+            return true;
+          }
+          if (force === false) {
+            names.delete(className);
+            return false;
+          }
+          if (names.has(className)) {
+            names.delete(className);
+            return false;
+          }
+          names.add(className);
+          return true;
+        }
+      };
+    };
+
+    const tabWidthPx = 120;
+    const tabHeightPx = 40;
+    const getTabNodes = (tabList) =>
+      tabList.children.filter((node) => {
+        const className = typeof node.className === 'string' ? node.className : '';
+        return className.split(' ').includes('tab--item') || node.classList?.contains?.('tab--item');
+      });
+
+    const syncTabLayout = (tabList) => {
+      let index = 0;
+      tabList.children.forEach((node) => {
+        if (!getTabNodes(tabList).includes(node)) {
+          return;
+        }
+        node.left = tabList.left + index * tabWidthPx;
+        node.top = tabList.top;
+        index += 1;
+      });
+    };
+
+    const createTabListStub = ({ left, top }) => {
+      const addButton = { className: 'tab--add', parentNode: null };
+      const tabList = {
+        left,
+        top,
+        isConnected: true,
+        panel: null,
+        children: [],
+        querySelectorAll: (selector) => (selector === '.tab--item' ? getTabNodes(tabList) : []),
+        querySelector: (selector) => (selector === '.tab--add' ? addButton : null),
+        getBoundingClientRect: () => {
+          const tabCount = Math.max(getTabNodes(tabList).length, 1);
+          const width = tabCount * tabWidthPx;
+          return {
+            left: tabList.left,
+            right: tabList.left + width,
+            top: tabList.top,
+            bottom: tabList.top + tabHeightPx,
+            width,
+            height: tabHeightPx
+          };
+        },
+        closest: (selector) => (selector === '.browser' ? tabList.panel : null),
+        insertBefore: (node, beforeNode) => {
+          if (node.parentNode && typeof node.parentNode.removeChild === 'function') {
+            node.parentNode.removeChild(node);
+          }
+          const insertionIndex = beforeNode ? tabList.children.indexOf(beforeNode) : tabList.children.length;
+          const safeIndex = insertionIndex === -1 ? tabList.children.length : insertionIndex;
+          tabList.children.splice(safeIndex, 0, node);
+          node.parentNode = tabList;
+          syncTabLayout(tabList);
+        },
+        removeChild: (node) => {
+          const index = tabList.children.indexOf(node);
+          if (index === -1) {
+            return;
+          }
+          tabList.children.splice(index, 1);
+          node.parentNode = null;
+          syncTabLayout(tabList);
+        }
+      };
+      addButton.parentNode = tabList;
+      tabList.children.push(addButton);
+      return tabList;
+    };
+
+    const createPanelStub = (tabList) => {
+      const panel = {
+        tabList,
+        querySelector: (selector) => {
+          if (selector === '.tab--list') {
+            return tabList;
+          }
+          if (selector === '.tab--row') {
+            return {
+              getBoundingClientRect: () => ({
+                left: tabList.left,
+                right: tabList.left + Math.max(getTabNodes(tabList).length, 1) * tabWidthPx + 120,
+                top: tabList.top,
+                bottom: tabList.top + tabHeightPx,
+                width: Math.max(getTabNodes(tabList).length, 1) * tabWidthPx + 120,
+                height: tabHeightPx
+              })
+            };
+          }
+          return null;
+        },
+        getBoundingClientRect: () => ({
+          left: tabList.left,
+          right: tabList.left + 640,
+          top: tabList.top,
+          bottom: tabList.top + 320,
+          width: 640,
+          height: 320
+        }),
+        remove: () => {}
+      };
+      tabList.panel = panel;
+      return panel;
+    };
+
+    const createTabStub = ({ id }) => {
+      const tab = {
+        id,
+        className: 'tab--item',
+        classList: createClassList(['tab--item']),
+        style: {
+          transform: '',
+          transition: '',
+          flex: '',
+          minWidth: '',
+          maxWidth: '',
+          willChange: '',
+          zIndex: ''
+        },
+        left: 0,
+        top: 0,
+        parentNode: null,
+        animate: vi.fn(() => ({})),
+        getBoundingClientRect: () => ({
+          left: tab.left,
+          right: tab.left + tabWidthPx,
+          top: tab.top,
+          bottom: tab.top + tabHeightPx,
+          width: tabWidthPx,
+          height: tabHeightPx
+        }),
+        closest: (selector) => {
+          if (selector === '.tab--item') {
+            return tab;
+          }
+          if (selector === '.tab--list') {
+            return tab.parentNode;
+          }
+          if (selector === '.browser') {
+            return tab.parentNode?.panel ?? null;
+          }
+          return null;
+        },
+        setPointerCapture: () => {},
+        releasePointerCapture: () => {}
+      };
+      return tab;
+    };
+
+    const createDragProxyStub = (tab) => ({
+      className: 'tab--item',
+      classList: createClassList(['tab--item']),
+      style: {
+        left: '',
+        top: '',
+        width: '',
+        height: '',
+        minWidth: '',
+        maxWidth: '',
+        transform: '',
+        willChange: ''
+      },
+      getBoundingClientRect: () => tab.getBoundingClientRect(),
+      remove: () => {}
+    });
+
+    const sourceTabList = createTabListStub({ left: 40, top: 20 });
+    const targetTabList = createTabListStub({ left: 460, top: 20 });
+    createPanelStub(sourceTabList);
+    createPanelStub(targetTabList);
+
+    const sourceDraggedTab = createTabStub({ id: 'tab-a' });
+    const sourceSiblingTab = createTabStub({ id: 'tab-x' });
+    sourceDraggedTab.cloneNode = () => createDragProxyStub(sourceDraggedTab);
+    sourceSiblingTab.cloneNode = () => createDragProxyStub(sourceSiblingTab);
+    sourceTabList.insertBefore(sourceDraggedTab, sourceTabList.querySelector('.tab--add'));
+    sourceTabList.insertBefore(sourceSiblingTab, sourceTabList.querySelector('.tab--add'));
+
+    const targetTabA = createTabStub({ id: 'tab-b' });
+    const targetTabB = createTabStub({ id: 'tab-c' });
+    targetTabA.cloneNode = () => createDragProxyStub(targetTabA);
+    targetTabB.cloneNode = () => createDragProxyStub(targetTabB);
+    targetTabList.insertBefore(targetTabA, targetTabList.querySelector('.tab--add'));
+    targetTabList.insertBefore(targetTabB, targetTabList.querySelector('.tab--add'));
+
+    const windowListeners = new Map();
+    const rootListeners = new Map();
+    const windowStub = {
+      addEventListener: (type, listener) => {
+        windowListeners.set(type, listener);
+      },
+      removeEventListener: (type) => {
+        windowListeners.delete(type);
+      },
+      requestAnimationFrame: (callback) => {
+        callback();
+        return 1;
+      },
+      cancelAnimationFrame: () => {},
+      innerWidth: 1400,
+      innerHeight: 900
+    };
+
+    const createDocumentElementStub = () => {
+      const element = {
+        className: '',
+        style: {},
+        parentNode: null,
+        left: 0,
+        top: 0,
+        setAttribute: () => {},
+        closest: (selector) => {
+          if (selector === '.tab--list') {
+            return element.parentNode;
+          }
+          if (selector === '.browser') {
+            return element.parentNode?.panel ?? null;
+          }
+          return null;
+        },
+        getBoundingClientRect: () => ({
+          left: element.left,
+          right: element.left + tabWidthPx,
+          top: element.top,
+          bottom: element.top + tabHeightPx,
+          width: tabWidthPx,
+          height: tabHeightPx
+        }),
+        remove: () => {
+          if (element.parentNode && typeof element.parentNode.removeChild === 'function') {
+            element.parentNode.removeChild(element);
+          }
+        }
+      };
+      return element;
+    };
+
+    const documentStub = {
+      body: {
+        style: {
+          userSelect: ''
+        },
+        append: () => {}
+      },
+      createElement: () => createDocumentElementStub(),
+      querySelectorAll: (selector) => (selector === '.tab--list' ? [sourceTabList, targetTabList] : []),
+      elementsFromPoint: (clientX, clientY) => {
+        const targetRect = targetTabList.getBoundingClientRect();
+        if (
+          clientX >= targetRect.left &&
+          clientX <= targetRect.right &&
+          clientY >= targetRect.top &&
+          clientY <= targetRect.bottom
+        ) {
+          return [targetTabList];
+        }
+        return [sourceTabList];
+      },
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    };
+
+    const root = {
+      addEventListener: (type, listener) => {
+        rootListeners.set(type, listener);
+      }
+    };
+
+    class ElementStub {}
+
+    globalThis.window = windowStub;
+    globalThis.document = documentStub;
+    globalThis.Element = ElementStub;
+
+    try {
+      initializeTabDrag({ root });
+
+      rootListeners.get('pointerdown')({
+        button: 0,
+        target: sourceDraggedTab,
+        pointerId: 7,
+        clientX: 80,
+        clientY: 30
+      });
+      windowListeners.get('pointermove')({
+        pointerId: 7,
+        clientX: 110,
+        clientY: 30
+      });
+      windowListeners.get('pointermove')({
+        pointerId: 7,
+        clientX: 560,
+        clientY: 30
+      });
+
+      expect(sourceDraggedTab.parentNode).toBe(sourceTabList);
+      expect(
+        getTabNodes(targetTabList)
+          .map((tab) => tab.id)
+          .filter(Boolean)
+      ).toEqual(['tab-b', 'tab-c']);
+
+      windowListeners.get('pointerup')({
+        pointerId: 7,
+        clientX: 560,
+        clientY: 30
+      });
+
+      expect(sourceDraggedTab.parentNode).toBe(targetTabList);
+      expect(
+        getTabNodes(sourceTabList)
+          .map((tab) => tab.id)
+          .filter(Boolean)
+      ).toEqual(['tab-x']);
+      expect(
+        getTabNodes(targetTabList)
+          .map((tab) => tab.id)
+          .filter(Boolean)
+      ).toContain('tab-a');
+    } finally {
+      globalThis.window = previousWindow;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+    }
+  });
+
+  it('removes source panel after single-tab detach intent', () => {
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+
+    const createClassList = (initialNames = []) => {
+      const names = new Set(initialNames);
+      return {
+        add: (...classNames) => {
+          classNames.forEach((name) => names.add(name));
+        },
+        remove: (...classNames) => {
+          classNames.forEach((name) => names.delete(name));
+        },
+        contains: (className) => names.has(className),
+        toggle: (className, force) => {
+          if (force === true) {
+            names.add(className);
+            return true;
+          }
+          if (force === false) {
+            names.delete(className);
+            return false;
+          }
+          if (names.has(className)) {
+            names.delete(className);
+            return false;
+          }
+          names.add(className);
+          return true;
+        }
+      };
+    };
+
+    const windowListeners = new Map();
+    const rootListeners = new Map();
+    let frameToken = 0;
+    let queuedFrameCallback = null;
+
+    const flushAnimationFrame = () => {
+      if (!queuedFrameCallback) {
+        return;
+      }
+
+      const callback = queuedFrameCallback;
+      queuedFrameCallback = null;
+      callback();
+    };
+
+    const windowStub = {
+      innerWidth: 1280,
+      innerHeight: 720,
+      addEventListener: (type, listener) => {
+        windowListeners.set(type, listener);
+      },
+      removeEventListener: (type) => {
+        windowListeners.delete(type);
+      },
+      requestAnimationFrame: (callback) => {
+        frameToken += 1;
+        queuedFrameCallback = callback;
+        return frameToken;
+      },
+      cancelAnimationFrame: () => {
+        queuedFrameCallback = null;
+      }
+    };
+
+    const sourcePanel = {
+      style: {
+        width: '',
+        height: '',
+        left: '',
+        top: ''
+      },
+      removed: false,
+      getBoundingClientRect: () => ({
+        left: 60,
+        top: 320,
+        width: 520,
+        height: 300
+      }),
+      querySelector: (selector) => {
+        if (selector === '.tab--row') {
+          return {
+            getBoundingClientRect: () => ({
+              left: 60,
+              right: 580,
+              top: 320,
+              bottom: 360,
+              width: 520,
+              height: 40
+            })
+          };
+        }
+        return null;
+      },
+      remove: () => {
+        sourcePanel.removed = true;
+      }
+    };
+
+    const tabList = {
+      querySelectorAll: (selector) => (selector === '.tab--item' ? [draggedTab] : []),
+      querySelector: (selector) => (selector === '.tab--add' ? addButton : null),
+      getBoundingClientRect: () => ({
+        left: 100,
+        right: 260,
+        top: 320,
+        bottom: 360,
+        width: 160,
+        height: 40
+      }),
+      closest: (selector) => (selector === '.browser' ? sourcePanel : null),
+      insertBefore: () => {}
+    };
+
+    const addButton = {};
+    const dragProxy = {
+      classList: createClassList(['tab--item']),
+      style: {
+        left: '',
+        top: '',
+        width: '',
+        height: '',
+        minWidth: '',
+        maxWidth: '',
+        transform: '',
+        willChange: ''
+      },
+      getBoundingClientRect: () => ({
+        left: 100,
+        top: 320,
+        width: 120,
+        height: 40
+      }),
+      remove: () => {}
+    };
+
+    const draggedTab = {
+      style: {
+        transform: '',
+        transition: '',
+        flex: '',
+        minWidth: '',
+        maxWidth: '',
+        willChange: '',
+        zIndex: ''
+      },
+      classList: createClassList(['tab--item', 'tab--active']),
+      parentNode: tabList,
+      getBoundingClientRect: () => ({
+        left: 100,
+        top: 320,
+        width: 120,
+        height: 40
+      }),
+      cloneNode: () => dragProxy,
+      closest: (selector) => {
+        if (selector === '.tab--item') {
+          return draggedTab;
+        }
+        if (selector === '.tab--list') {
+          return tabList;
+        }
+        if (selector === '.browser') {
+          return sourcePanel;
+        }
+        return null;
+      },
+      setPointerCapture: () => {},
+      releasePointerCapture: () => {}
+    };
+
+    const documentStub = {
+      body: {
+        style: {
+          userSelect: ''
+        },
+        append: () => {}
+      },
+      querySelectorAll: (selector) => (selector === '.tab--list' ? [tabList] : []),
+      elementsFromPoint: () => [],
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    };
+
+    const root = {
+      addEventListener: (type, listener) => {
+        rootListeners.set(type, listener);
+      }
+    };
+
+    class ElementStub {}
+
+    globalThis.window = windowStub;
+    globalThis.document = documentStub;
+    globalThis.Element = ElementStub;
+
+    try {
+      initializeTabDrag({ root });
+      rootListeners.get('pointerdown')({
+        button: 0,
+        target: draggedTab,
+        pointerId: 1,
+        clientX: 120,
+        clientY: 340
+      });
+      windowListeners.get('pointermove')({
+        pointerId: 1,
+        clientX: 126,
+        clientY: 344
+      });
+      flushAnimationFrame();
+      windowListeners.get('pointermove')({
+        pointerId: 1,
+        clientX: 126,
+        clientY: 412
+      });
+      flushAnimationFrame();
+      windowListeners.get('pointermove')({
+        pointerId: 1,
+        clientX: 126,
+        clientY: 456
+      });
+      flushAnimationFrame();
+
+      expect(sourcePanel.removed).toBe(true);
+    } finally {
+      globalThis.window = previousWindow;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+    }
   });
 });
