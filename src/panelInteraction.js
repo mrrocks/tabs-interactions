@@ -9,13 +9,19 @@ import {
 const resizeHitArea = 10;
 const grabCursor = 'grab';
 const grabbingCursor = 'grabbing';
+const panelSelector = '[data-resizable]';
+const initializedPanels = new WeakSet();
 
-export const initializePanelInteractions = () => {
-  const panel = document.querySelector('[data-resizable]');
-
-  if (!panel) {
-    return;
+export const initializePanelInteraction = (panel) => {
+  if (!panel || initializedPanels.has(panel)) {
+    return false;
   }
+
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
+  initializedPanels.add(panel);
 
   let interactionState = null;
   let frameRequestId = 0;
@@ -266,7 +272,10 @@ export const initializePanelInteractions = () => {
       return;
     }
 
-    if (event.target instanceof Element && event.target.closest('.tab--item')) {
+    if (
+      event.target instanceof Element &&
+      (event.target.closest('.tab--item') || event.target.closest('.window--controls'))
+    ) {
       return;
     }
 
@@ -315,4 +324,33 @@ export const initializePanelInteractions = () => {
   }
 
   window.addEventListener('resize', clampPanelToViewport);
+
+  return true;
+};
+
+const queryPanels = (root) => {
+  if (!root) {
+    return [];
+  }
+
+  if (typeof root.querySelectorAll === 'function') {
+    return Array.from(root.querySelectorAll(panelSelector));
+  }
+
+  if (typeof root.querySelector === 'function') {
+    const panel = root.querySelector(panelSelector);
+    return panel ? [panel] : [];
+  }
+
+  return [];
+};
+
+export const initializePanelInteractions = (root = document) => {
+  const panels = queryPanels(root);
+
+  panels.forEach((panel) => {
+    initializePanelInteraction(panel);
+  });
+
+  return panels;
 };

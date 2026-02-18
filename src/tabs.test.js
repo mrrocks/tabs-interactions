@@ -67,6 +67,30 @@ describe('initializeTabs selectors', () => {
 
     expect(querySelector).toHaveBeenCalledWith(tabListSelector);
   });
+
+  it('initializes every tab list found by querySelectorAll', () => {
+    const firstListFirstTab = createTab({ classNames: [activeTabClassName], selected: true });
+    const firstListSecondTab = createTab({ classNames: [inactiveTabClassName], selected: false });
+    const secondListFirstTab = createTab({ classNames: [inactiveTabClassName], selected: false });
+    const secondListSecondTab = createTab({ classNames: [activeTabClassName], selected: true });
+    const firstTabList = createTabList([firstListFirstTab, firstListSecondTab]);
+    const secondTabList = createTabList([secondListFirstTab, secondListSecondTab]);
+
+    vi.stubGlobal('document', {
+      querySelectorAll: (selector) => (selector === tabListSelector ? [firstTabList, secondTabList] : [])
+    });
+
+    initializeTabs();
+
+    expect(firstListFirstTab.classList.contains(activeTabClassName)).toBe(true);
+    expect(secondListSecondTab.classList.contains(activeTabClassName)).toBe(true);
+
+    secondTabList.dispatch('click', { target: secondListFirstTab });
+
+    expect(secondListFirstTab.classList.contains(activeTabClassName)).toBe(true);
+    expect(secondListSecondTab.classList.contains(inactiveTabClassName)).toBe(true);
+    expect(firstListFirstTab.classList.contains(activeTabClassName)).toBe(true);
+  });
 });
 
 describe('setActiveTab', () => {

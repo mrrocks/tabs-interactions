@@ -75,6 +75,7 @@ body
   --panel-min-height: 80px
   --tab-default-width: 244px
   --tab-min-width: 140px
+  --window-drop-shadow: 0 20px 48px rgba(0, 0, 0, 0.2), 0 8px 20px rgba(0, 0, 0, 0.1)
 
   position: fixed
   left: calc(50vw - var(--panel-default-width) / 2)
@@ -85,11 +86,15 @@ body
   min-height: var(--panel-min-height)
   border-radius: 16px
   background: var(--bg-surface-backdrop)
+  box-shadow: var(--window-drop-shadow)
   padding-top: 4px
   contain: layout paint
   cursor: grab
   touch-action: none
   will-change: left, top, width, height
+
+  &.browser--detached
+    z-index: 3
 
   .tab--row
     height: 40px
@@ -99,6 +104,47 @@ body
     padding: 0 14px;
     gap: 16px
     overflow: visible
+
+  .window--controls
+    flex: 0 0 auto
+    display: flex
+    align-items: center
+    gap: 8px
+    padding: 0
+
+  .window--control
+    display: block
+    width: 12px
+    height: 12px
+    appearance: none
+    border: 1px solid transparent
+    border-radius: 999px
+    padding: 0
+    cursor: default
+    transition: filter var(--motion-transition-standard), transform var(--motion-transition-standard)
+
+  .window--control-close
+    background: #FB5F5B
+    border-color: #DD4745
+    cursor: pointer
+
+    &:hover
+      filter: brightness(0.92)
+
+    &:active
+      transform: scale(0.94)
+
+    &:focus-visible
+      outline: 2px solid #00000033
+      outline-offset: 2px
+
+  .window--control-minimize
+    background: #FDC03F
+    border-color: #DFA032
+
+  .window--control-expand
+    background: #3CCC49
+    border-color: #32AC34
 
   .bar
     height: 60px
@@ -138,8 +184,8 @@ body
     position: absolute
     inset: 0
     background-color: currentColor
-    -webkit-mask: url('/public/plus.svg') center / 15px 15px no-repeat
-    mask: url('/public/plus.svg') center / 15px 15px no-repeat
+    -webkit-mask: url('/plus.svg') center / 15px 15px no-repeat
+    mask: url('/plus.svg') center / 15px 15px no-repeat
 
   &:hover
     background: var(--t-container-fill--tertiary)
@@ -173,6 +219,68 @@ body
   overflow: visible
   cursor: pointer
   transition: color var(--motion-transition-standard)
+
+  &.tab--drag-source
+    visibility: hidden
+    pointer-events: none
+
+  &.tab--drag-source.tab--drag-source-visible
+    visibility: visible
+
+  &.tab--drag-proxy
+    position: fixed
+    top: 0
+    left: 0
+    margin: 0
+    z-index: 8
+    pointer-events: none
+    will-change: transform
+
+  &.tab--dragging
+    cursor: grabbing
+    z-index: 8
+    transition: none
+    pointer-events: none
+
+    &::before
+      transition: none
+
+    .tab--shape
+      transition: none
+
+    .tab--close
+      transition: none
+
+  &.tab--dragging-active
+    color: var(--text-primary)
+    --label-close-button-gap: 20px
+    --label-fade-width: 40px
+
+    .tab--shape
+      opacity: 1
+      transform: translateY(0) scale(1)
+      border-radius: 12px
+
+      &::before,
+      &::after
+        opacity: 0
+        transform: translateY(4px)
+
+    .tab--close
+      opacity: 1
+      pointer-events: auto
+
+  &.tab--dragging-inactive
+    color: var(--text-primary)
+    --label-close-button-gap: 20px
+    --label-fade-width: 40px
+
+    &::before
+      opacity: 1
+
+    .tab--close
+      opacity: 1
+      pointer-events: auto
 
   &::before
     content: ''
@@ -300,8 +408,8 @@ body
       position: absolute
       inset: 0
       background-color: currentColor
-      -webkit-mask: url('/public/x.svg') center / 7px 7px no-repeat
-      mask: url('/public/x.svg') center / 7px 7px no-repeat
+      -webkit-mask: url('/x.svg') center / 7px 7px no-repeat
+      mask: url('/x.svg') center / 7px 7px no-repeat
 
     &:hover
       background: var(--bg-button-tertiary)

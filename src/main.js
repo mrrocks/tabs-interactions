@@ -1,8 +1,15 @@
 import './styles.sass';
 import { initializeMotionSlowdownControl } from './motionSpeed';
-import { initializePanelInteractions } from './panelInteraction';
-import { initializeTabs } from './tabs';
+import { initializePanelInteraction, initializePanelInteractions } from './panelInteraction';
+import { initializeTabDrag } from './tabDrag';
+import { initializeTabList, initializeTabs } from './tabs';
+import { initializeWindowControls } from './windowControls';
 
 initializeMotionSlowdownControl();
-initializePanelInteractions();
+initializeWindowControls();
 initializeTabs();
+initializePanelInteractions();
+initializeTabDrag({
+  initializePanelInteraction,
+  initializeTabList
+});

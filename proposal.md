@@ -1,0 +1,1 @@
+- Drag unactive tabs without focusing them
