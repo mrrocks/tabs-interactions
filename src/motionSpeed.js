@@ -3,7 +3,7 @@ export const defaultMotionSlowdownFactor = 1;
 
 export const motionSlowdownRange = Object.freeze({
   min: 1,
-  max: 6,
+  max: 12,
   step: 0.1
 });
 

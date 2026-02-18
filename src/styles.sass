@@ -197,7 +197,8 @@ body
     border-radius: 12px 12px 0 0
     background: var(--bg-surface)
     opacity: 0
-    transform: translateY(12px)
+    transform: translateY(8px) scale(0.92)
+    transform-origin: center bottom
     pointer-events: none
     z-index: 0
     transition: opacity var(--motion-transition-standard), transform var(--motion-transition-standard)
@@ -241,7 +242,7 @@ body
 
     .tab--shape
       opacity: 1
-      transform: translateY(0)
+      transform: translateY(0) scale(1)
 
       &::before,
       &::after
