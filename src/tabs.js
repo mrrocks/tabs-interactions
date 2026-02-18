@@ -5,6 +5,7 @@ import {
   getTabActivationState,
   inactiveTabClassName
 } from './tabState';
+import { consumeDragCompleted } from './tabDragSignal';
 
 export const tabListSelector = '.tab--list';
 export const tabSelector = '.tab--item';
@@ -61,6 +62,10 @@ const initializeTabListState = (tabList) => {
 };
 
 const onTabListClick = (tabList, event) => {
+  if (consumeDragCompleted()) {
+    return;
+  }
+
   if (!isEventTargetElement(event.target)) {
     return;
   }
