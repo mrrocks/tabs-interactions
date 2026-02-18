@@ -31,6 +31,7 @@ export const windowAttachPaddingPx = 12;
 export const verticalResistanceFactor = 0.22;
 export const verticalResistanceMaxPx = 30;
 const dragProxySettleDurationMs = 140;
+const dragResizeTransitionDurationMs = 110;
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -39,6 +40,7 @@ const dragSourceClassName = 'tab--drag-source';
 const dragSourceVisibleClassName = 'tab--drag-source-visible';
 const dragProxyClassName = 'tab--drag-proxy';
 const dragHoverPreviewClassName = 'tab--drag-hover-preview';
+const bodyDraggingClassName = 'body--tab-dragging';
 const tabAddSelector = '.tab--add';
 const closeButtonSelector = '.tab--close';
 const initializedRoots = new WeakSet();
@@ -308,6 +310,7 @@ export const initializeTabDrag = ({
   let sourceWindowRemovedDuringDetach = false;
   let hoverAttachPreviewTab = null;
   let hoverAttachPreviewTabList = null;
+  let dragVisualResizeTransitionEnabled = false;
 
   const clearGlobalListeners = () => {
     window.removeEventListener('pointermove', onPointerMove);
@@ -347,12 +350,97 @@ export const initializeTabDrag = ({
     previewTab.style.transition = 'none';
     const previewWidthPx = resolveHoverPreviewWidthPx(session);
     if (previewWidthPx > 0) {
-      previewTab.style.flex = `0 0 ${previewWidthPx}px`;
-      previewTab.style.minWidth = `${previewWidthPx}px`;
-      previewTab.style.maxWidth = `${previewWidthPx}px`;
+      previewTab.style.flex = `0 1 ${previewWidthPx}px`;
     }
 
     return previewTab;
+  };
+
+  const enableDragVisualResizeTransition = (session) => {
+    if (dragVisualResizeTransitionEnabled || !session) {
+      return;
+    }
+
+    const transitionDurationMs = scaleDurationMs(dragResizeTransitionDurationMs);
+    const proxyTransition = [
+      `width ${transitionDurationMs}ms ease`,
+      `min-width ${transitionDurationMs}ms ease`,
+      `max-width ${transitionDurationMs}ms ease`
+    ].join(', ');
+    const tabTransition = [
+      `flex-basis ${transitionDurationMs}ms ease`,
+      `min-width ${transitionDurationMs}ms ease`,
+      `max-width ${transitionDurationMs}ms ease`
+    ].join(', ');
+
+    if (session.dragProxy) {
+      session.dragProxy.style.transition = proxyTransition;
+    }
+    session.draggedTab.style.transition = tabTransition;
+    dragVisualResizeTransitionEnabled = true;
+  };
+
+  const applyDragVisualWidth = (session, widthPx) => {
+    const resolvedWidthPx = toFiniteNumber(widthPx, 0);
+    if (!session || resolvedWidthPx <= 0) {
+      return;
+    }
+
+    enableDragVisualResizeTransition(session);
+
+    if (session.dragProxy) {
+      session.dragProxy.style.width = `${resolvedWidthPx}px`;
+      session.dragProxy.style.minWidth = `${resolvedWidthPx}px`;
+      session.dragProxy.style.maxWidth = `${resolvedWidthPx}px`;
+    }
+
+    session.draggedTab.style.flex = `0 1 ${resolvedWidthPx}px`;
+    session.draggedTab.style.flexBasis = `${resolvedWidthPx}px`;
+    session.draggedTab.style.minWidth = `${resolvedWidthPx}px`;
+    session.draggedTab.style.maxWidth = `${resolvedWidthPx}px`;
+  };
+
+  const resetDragVisualWidth = (session) => {
+    if (!session) {
+      return;
+    }
+
+    const baseWidthPx = resolveHoverPreviewWidthPx({
+      dragProxyBaseRect: session.dragProxyBaseRect,
+      draggedTab: session.draggedTab
+    });
+    if (baseWidthPx <= 0) {
+      return;
+    }
+
+    if (session.dragProxy) {
+      session.dragProxy.style.width = `${baseWidthPx}px`;
+      session.dragProxy.style.minWidth = `${baseWidthPx}px`;
+      session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
+    }
+
+    session.draggedTab.style.flex = `0 0 ${baseWidthPx}px`;
+    session.draggedTab.style.flexBasis = `${baseWidthPx}px`;
+    session.draggedTab.style.minWidth = `${baseWidthPx}px`;
+    session.draggedTab.style.maxWidth = `${baseWidthPx}px`;
+  };
+
+  const syncDragVisualWidthWithHoverPreview = (session) => {
+    if (!hoverAttachPreviewTab || !session || typeof hoverAttachPreviewTab.getBoundingClientRect !== 'function') {
+      return;
+    }
+
+    const previewWidthPx = toFiniteNumber(hoverAttachPreviewTab.getBoundingClientRect().width, 0);
+    if (previewWidthPx <= 0) {
+      return;
+    }
+
+    applyDragVisualWidth(session, previewWidthPx);
+  };
+
+  const clearHoverPreviewAndResetDragWidth = (session) => {
+    clearHoverAttachPreview();
+    resetDragVisualWidth(session);
   };
 
   const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
@@ -400,6 +488,43 @@ export const initializeTabDrag = ({
     };
   };
 
+  const commitDropIntoHoverPreview = ({ draggedTab, attachTargetTabList }) => {
+    if (!hoverAttachPreviewTab || hoverAttachPreviewTabList !== attachTargetTabList) {
+      return false;
+    }
+
+    if (!attachTargetTabList || typeof attachTargetTabList.insertBefore !== 'function') {
+      clearHoverAttachPreview();
+      return false;
+    }
+
+    if (hoverAttachPreviewTab.parentNode !== attachTargetTabList) {
+      clearHoverAttachPreview();
+      return false;
+    }
+
+    attachTargetTabList.insertBefore(draggedTab, hoverAttachPreviewTab);
+    clearHoverAttachPreview();
+    return true;
+  };
+
+  const commitDropAttach = ({ draggedTab, attachTargetTabList, pointerClientX }) => {
+    const didCommitPreviewDrop = commitDropIntoHoverPreview({
+      draggedTab,
+      attachTargetTabList
+    });
+
+    if (!didCommitPreviewDrop) {
+      moveTabWithLayoutPipeline({
+        tabList: attachTargetTabList,
+        draggedTab,
+        pointerClientX
+      });
+    }
+
+    activateDraggedTabInTarget(draggedTab, attachTargetTabList);
+  };
+
   const finishDrag = () => {
     if (!dragState) {
       return;
@@ -409,11 +534,12 @@ export const initializeTabDrag = ({
     dragState = null;
     hasQueuedPointer = false;
     sourceWindowRemovedDuringDetach = false;
+    dragVisualResizeTransitionEnabled = false;
     clearGlobalListeners();
-    clearHoverAttachPreview();
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = completedState.initialUserSelect;
+      document.body.classList.remove(bodyDraggingClassName);
     }
 
     if (typeof completedState.draggedTab.releasePointerCapture === 'function') {
@@ -425,6 +551,7 @@ export const initializeTabDrag = ({
     }
 
     if (!completedState.dragStarted) {
+      clearHoverPreviewAndResetDragWidth(completedState);
       return;
     }
 
@@ -464,15 +591,15 @@ export const initializeTabDrag = ({
       });
 
       if (attachTarget) {
-        moveTabWithLayoutPipeline({
-          tabList: attachTarget,
+        commitDropAttach({
           draggedTab: completedState.draggedTab,
+          attachTargetTabList: attachTarget,
           pointerClientX: completedState.lastClientX
         });
-        activateDraggedTabInTarget(completedState.draggedTab, attachTarget);
         removePanel(completedState.detachedPanel);
       }
 
+      clearHoverAttachPreview();
       settleVisualState();
 
       if (completedState.dragMoved) {
@@ -517,12 +644,11 @@ export const initializeTabDrag = ({
 
     if (dropDestination === 'attach' && sourceTabList && sourcePanel) {
       const activateInSource = captureSourceActivation(completedState.draggedTab, sourceTabList);
-      moveTabWithLayoutPipeline({
-        tabList: attachTargetTabList,
+      commitDropAttach({
         draggedTab: completedState.draggedTab,
+        attachTargetTabList,
         pointerClientX: completedState.lastClientX
       });
-      activateDraggedTabInTarget(completedState.draggedTab, attachTargetTabList);
       windowLifecycle.closeSourcePanelIfEmpty({
         sourcePanel,
         sourceTabList
@@ -542,6 +668,7 @@ export const initializeTabDrag = ({
 
       if (detachedWindow) {
         activateInSource?.();
+        clearHoverPreviewAndResetDragWidth(completedState);
         cleanupVisualState();
 
         if (completedState.dragMoved) {
@@ -552,6 +679,10 @@ export const initializeTabDrag = ({
       }
     }
 
+    clearHoverAttachPreview();
+    if (dropDestination !== 'attach') {
+      resetDragVisualWidth(completedState);
+    }
     settleVisualState();
 
     if (completedState.dragMoved) {
@@ -673,7 +804,7 @@ export const initializeTabDrag = ({
     }
 
     if (!attachTarget) {
-      clearHoverAttachPreview();
+      clearHoverPreviewAndResetDragWidth(dragState);
       return false;
     }
 
@@ -689,6 +820,7 @@ export const initializeTabDrag = ({
         draggedTab: hoverAttachPreviewTab,
         pointerClientX: clientX
       });
+      syncDragVisualWidthWithHoverPreview(dragState);
     }
 
     return true;
@@ -747,6 +879,7 @@ export const initializeTabDrag = ({
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = 'none';
+      document.body.classList.add(bodyDraggingClassName);
     }
   };
 
@@ -877,6 +1010,7 @@ export const initializeTabDrag = ({
     queuedClientY = event.clientY;
     hasQueuedPointer = true;
     sourceWindowRemovedDuringDetach = false;
+    dragVisualResizeTransitionEnabled = false;
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);

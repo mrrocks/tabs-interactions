@@ -459,16 +459,19 @@ describe('tab drag integration flows', () => {
         const className = typeof node.className === 'string' ? node.className : '';
         return className.split(' ').includes('tab--item') || node.classList?.contains?.('tab--item');
       });
+    const resolveTabWidthPx = (tabList) => (getTabNodes(tabList).length >= 3 ? 92 : tabWidthPx);
 
     const syncTabLayout = (tabList) => {
-      let index = 0;
+      let leftOffset = 0;
+      const tabWidth = resolveTabWidthPx(tabList);
       tabList.children.forEach((node) => {
         if (!getTabNodes(tabList).includes(node)) {
           return;
         }
-        node.left = tabList.left + index * tabWidthPx;
+        node.width = tabWidth;
+        node.left = tabList.left + leftOffset;
         node.top = tabList.top;
-        index += 1;
+        leftOffset += tabWidth;
       });
     };
 
@@ -483,8 +486,10 @@ describe('tab drag integration flows', () => {
         querySelectorAll: (selector) => (selector === '.tab--item' ? getTabNodes(tabList) : []),
         querySelector: (selector) => (selector === '.tab--add' ? addButton : null),
         getBoundingClientRect: () => {
-          const tabCount = Math.max(getTabNodes(tabList).length, 1);
-          const width = tabCount * tabWidthPx;
+          const width = Math.max(
+            getTabNodes(tabList).reduce((total, node) => total + (node.width ?? tabWidthPx), 0),
+            tabWidthPx
+          );
           return {
             left: tabList.left,
             right: tabList.left + width,
@@ -571,14 +576,15 @@ describe('tab drag integration flows', () => {
         },
         left: 0,
         top: 0,
+        width: tabWidthPx,
         parentNode: null,
         animate: vi.fn(() => ({})),
         getBoundingClientRect: () => ({
           left: tab.left,
-          right: tab.left + tabWidthPx,
+          right: tab.left + tab.width,
           top: tab.top,
           bottom: tab.top + tabHeightPx,
-          width: tabWidthPx,
+          width: tab.width,
           height: tabHeightPx
         }),
         closest: (selector) => {
@@ -623,7 +629,8 @@ describe('tab drag integration flows', () => {
 
     const sourceDraggedTab = createTabStub({ id: 'tab-a' });
     const sourceSiblingTab = createTabStub({ id: 'tab-x' });
-    sourceDraggedTab.cloneNode = () => createDragProxyStub(sourceDraggedTab);
+    const sourceDragProxy = createDragProxyStub(sourceDraggedTab);
+    sourceDraggedTab.cloneNode = () => sourceDragProxy;
     sourceSiblingTab.cloneNode = () => createDragProxyStub(sourceSiblingTab);
     sourceTabList.insertBefore(sourceDraggedTab, sourceTabList.querySelector('.tab--add'));
     sourceTabList.insertBefore(sourceSiblingTab, sourceTabList.querySelector('.tab--add'));
@@ -660,6 +667,7 @@ describe('tab drag integration flows', () => {
         parentNode: null,
         left: 0,
         top: 0,
+        width: tabWidthPx,
         setAttribute: () => {},
         closest: (selector) => {
           if (selector === '.tab--list') {
@@ -671,11 +679,16 @@ describe('tab drag integration flows', () => {
           return null;
         },
         getBoundingClientRect: () => ({
+          ...(() => {
+            const width = element.className.split(' ').includes('tab--drag-hover-preview') ? 92 : element.width;
+            return {
+              right: element.left + width,
+              width
+            };
+          })(),
           left: element.left,
-          right: element.left + tabWidthPx,
           top: element.top,
           bottom: element.top + tabHeightPx,
-          width: tabWidthPx,
           height: tabHeightPx
         }),
         remove: () => {
@@ -769,6 +782,7 @@ describe('tab drag integration flows', () => {
           .map((tab) => tab.id)
           .filter(Boolean)
       ).toContain('tab-a');
+      expect(getTabNodes(targetTabList).every((tab) => Boolean(tab.id))).toBe(true);
     } finally {
       globalThis.window = previousWindow;
       globalThis.document = previousDocument;
