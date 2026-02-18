@@ -1,20 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyVerticalResistance,
-  detachHysteresisPx,
   detachThresholdPx,
   getInsertionIndexFromCenters,
   getProxySettleDelta,
   resolveDetachIntent,
+  resolveDropDetachIntent,
+  resolveDropAttachTarget,
   resolveDragVisualOffsetY,
   shouldCloseSourcePanelAfterTransfer,
+  shouldDetachFromVerticalDelta,
   shouldDetachOnDrop,
   shouldRemoveSourceWindowOnDetach,
-  shouldArmReattach,
-  shouldDetachFromVerticalDelta,
-  shouldReattachToOriginalStrip,
-  windowAttachPaddingPx,
-  verticalResistanceMaxPx
+  verticalResistanceMaxPx,
+  windowAttachPaddingPx
 } from './tabDrag';
 
 describe('getInsertionIndexFromCenters', () => {
@@ -41,49 +40,10 @@ describe('shouldDetachFromVerticalDelta', () => {
   });
 });
 
-describe('detach and reattach progression', () => {
-  const originalStripRect = {
-    left: 100,
-    right: 500,
-    top: 40,
-    bottom: 88
-  };
-
-  it('allows reattach after detach hysteresis while pointer stays down', () => {
-    expect(shouldDetachFromVerticalDelta(detachThresholdPx + 4)).toBe(true);
-    expect(shouldArmReattach({ clientY: 180, detachOriginY: 180 })).toBe(false);
-    expect(shouldArmReattach({ clientY: 180 + detachHysteresisPx, detachOriginY: 180 })).toBe(true);
-    expect(
-      shouldReattachToOriginalStrip({
-        reattachArmed: false,
-        clientX: 220,
-        clientY: 62,
-        rect: originalStripRect
-      })
-    ).toBe(false);
-    expect(
-      shouldReattachToOriginalStrip({
-        reattachArmed: true,
-        clientX: 220,
-        clientY: 62,
-        rect: originalStripRect
-      })
-    ).toBe(true);
-  });
-});
-
-describe('shouldRemoveSourceWindowOnDetach', () => {
-  it('removes source window only when dragging its single tab', () => {
-    expect(shouldRemoveSourceWindowOnDetach(1)).toBe(true);
-    expect(shouldRemoveSourceWindowOnDetach(2)).toBe(false);
-  });
-});
-
 describe('shouldDetachOnDrop', () => {
-  it('creates detached window only on drop from attached detach intent', () => {
-    expect(shouldDetachOnDrop({ mode: 'attached', detachIntentActive: true })).toBe(true);
-    expect(shouldDetachOnDrop({ mode: 'attached', detachIntentActive: false })).toBe(false);
-    expect(shouldDetachOnDrop({ mode: 'detached', detachIntentActive: true })).toBe(false);
+  it('creates detached window when detach intent is active on drop', () => {
+    expect(shouldDetachOnDrop({ detachIntentActive: true })).toBe(true);
+    expect(shouldDetachOnDrop({ detachIntentActive: false })).toBe(false);
   });
 });
 
@@ -127,6 +87,14 @@ describe('shouldCloseSourcePanelAfterTransfer', () => {
   });
 });
 
+describe('shouldRemoveSourceWindowOnDetach', () => {
+  it('removes source window only when dragging its single tab', () => {
+    expect(shouldRemoveSourceWindowOnDetach(1)).toBe(true);
+    expect(shouldRemoveSourceWindowOnDetach(2)).toBe(false);
+    expect(shouldRemoveSourceWindowOnDetach(0)).toBe(false);
+  });
+});
+
 describe('getProxySettleDelta', () => {
   it('computes settle translation from proxy rect to target rect', () => {
     expect(
@@ -138,5 +106,126 @@ describe('getProxySettleDelta', () => {
       deltaX: 150,
       deltaY: 48
     });
+  });
+});
+
+describe('resolveDropAttachTarget', () => {
+  it('prefers explicit attach target when available', () => {
+    const sourceTabList = { id: 'source', isConnected: true };
+    const attachTargetTabList = { id: 'target-a', isConnected: true };
+    const hoverAttachTabList = { id: 'target-b', isConnected: true };
+
+    expect(
+      resolveDropAttachTarget({
+        attachTargetTabList,
+        hoverAttachTabList,
+        sourceTabList
+      })
+    ).toBe(attachTargetTabList);
+  });
+
+  it('falls back to last hovered attach target when explicit target misses', () => {
+    const sourceTabList = { id: 'source', isConnected: true };
+    const hoverAttachTabList = { id: 'target', isConnected: true };
+
+    expect(
+      resolveDropAttachTarget({
+        attachTargetTabList: null,
+        hoverAttachTabList,
+        sourceTabList,
+        dropClientX: 300,
+        dropClientY: 200,
+        hoverAttachClientX: 320,
+        hoverAttachClientY: 210
+      })
+    ).toBe(hoverAttachTabList);
+  });
+
+  it('rejects source or disconnected fallback targets', () => {
+    const sourceTabList = { id: 'source', isConnected: true };
+    const disconnectedHoverTarget = { id: 'target', isConnected: false };
+
+    expect(
+      resolveDropAttachTarget({
+        attachTargetTabList: null,
+        hoverAttachTabList: sourceTabList,
+        sourceTabList,
+        dropClientX: 100,
+        dropClientY: 100,
+        hoverAttachClientX: 100,
+        hoverAttachClientY: 100
+      })
+    ).toBeNull();
+    expect(
+      resolveDropAttachTarget({
+        attachTargetTabList: null,
+        hoverAttachTabList: disconnectedHoverTarget,
+        sourceTabList,
+        dropClientX: 100,
+        dropClientY: 100,
+        hoverAttachClientX: 100,
+        hoverAttachClientY: 100
+      })
+    ).toBeNull();
+  });
+
+  it('ignores stale hover target when drop is far away', () => {
+    const sourceTabList = { id: 'source', isConnected: true };
+    const hoverAttachTabList = { id: 'target', isConnected: true };
+
+    expect(
+      resolveDropAttachTarget({
+        attachTargetTabList: null,
+        hoverAttachTabList,
+        sourceTabList,
+        dropClientX: 600,
+        dropClientY: 420,
+        hoverAttachClientX: 120,
+        hoverAttachClientY: 60,
+        fallbackRadiusPx: 48
+      })
+    ).toBeNull();
+  });
+});
+
+describe('resolveDropDetachIntent', () => {
+  it('keeps detach when detach intent is active', () => {
+    expect(
+      resolveDropDetachIntent({
+        detachIntentActive: true,
+        isDropInsideCurrentHeader: false,
+        didCrossWindowAttach: false
+      })
+    ).toBe(true);
+  });
+
+  it('does not detach when drop stays in current header', () => {
+    expect(
+      resolveDropDetachIntent({
+        detachIntentActive: true,
+        isDropInsideCurrentHeader: true,
+        didCrossWindowAttach: false
+      })
+    ).toBe(false);
+  });
+
+  it('stays false when detach intent is not active', () => {
+    expect(
+      resolveDropDetachIntent({
+        detachIntentActive: false,
+        isDropInsideCurrentHeader: false,
+        didCrossWindowAttach: false
+      })
+    ).toBe(false);
+  });
+
+  it('cancels detach after cross-window attach in the same drag', () => {
+    expect(
+      resolveDropDetachIntent({
+        detachIntentActive: true,
+        isDropInsideCurrentHeader: false,
+        didCrossWindowAttach: true
+      })
+    ).toBe(false);
   });
 });

@@ -2,18 +2,31 @@ import { scaleDurationMs } from './motionSpeed';
 import { activeTabClassName } from './tabState';
 import { getTabs, tabListSelector, tabSelector } from './tabs';
 import {
-  applyPanelFrame,
   animateDetachedWindowFromTab,
+  applyPanelFrame,
   computeDetachedPanelFrame,
   createDetachedWindow,
   moveTabToList,
   removeDetachedWindowIfEmpty
 } from './windowManager';
 import { removePanel } from './windowControls';
+import {
+  createDragSession,
+  isSessionAttachedDrag,
+  isSessionDetachedDrag,
+  markSessionAsActivated,
+  transitionSessionToAttachedDrag,
+  transitionSessionToDetachedDrag,
+  transitionSessionToSettling
+} from './tabDrag/dragSessionStateMachine';
+import { createLayoutPipeline } from './tabDrag/layoutPipeline';
+import { createDropResolver } from './tabDrag/dropResolver';
+import { createWindowLifecycle } from './tabDrag/windowLifecycle';
+import { createAnimationCoordinator } from './tabDrag/animationCoordinator';
+import { createDragDomAdapter } from './tabDrag/dragDomAdapter';
 
 export const dragActivationDistancePx = 3;
 export const detachThresholdPx = 56;
-export const detachHysteresisPx = 14;
 export const reentryPaddingPx = 16;
 export const windowAttachPaddingPx = 12;
 export const verticalResistanceFactor = 0.22;
@@ -64,86 +77,6 @@ export const getInsertionIndexFromCenters = ({ centers, pointerClientX }) => {
 const isEventTargetElement = (target) =>
   Boolean(target) && typeof target === 'object' && typeof target.closest === 'function';
 
-const getTabEndReference = (tabList) => tabList.querySelector(tabAddSelector) ?? null;
-
-const getSiblingTabs = (tabList, draggedTab) => getTabs(tabList).filter((tab) => tab !== draggedTab);
-
-const getSiblingCenters = (tabs) => tabs.map((tab) => tab.getBoundingClientRect().left + tab.getBoundingClientRect().width / 2);
-
-const createTabLeftMap = (tabs) => {
-  const leftMap = new Map();
-
-  tabs.forEach((tab) => {
-    leftMap.set(tab, tab.getBoundingClientRect().left);
-  });
-
-  return leftMap;
-};
-
-const animateSiblingDisplacement = (tabs, beforeLeftMap) => {
-  const duration = scaleDurationMs(150);
-
-  tabs.forEach((tab) => {
-    const beforeLeft = beforeLeftMap.get(tab);
-    if (beforeLeft === undefined || typeof tab.animate !== 'function') {
-      return;
-    }
-
-    const afterLeft = tab.getBoundingClientRect().left;
-    const deltaX = beforeLeft - afterLeft;
-
-    if (Math.abs(deltaX) < 0.5) {
-      return;
-    }
-
-    tab.animate(
-      [{ transform: `translate3d(${deltaX}px, 0px, 0px)` }, { transform: 'translate3d(0px, 0px, 0px)' }],
-      {
-        duration,
-        easing: 'ease'
-      }
-    );
-  });
-};
-
-const moveTabToPointerPosition = ({ tabList, draggedTab, pointerClientX, animate = true }) => {
-  const siblingTabs = getSiblingTabs(tabList, draggedTab);
-  const centers = getSiblingCenters(siblingTabs);
-  const targetIndex = getInsertionIndexFromCenters({ centers, pointerClientX });
-  const currentTabs = getTabs(tabList);
-  const currentIndex = currentTabs.indexOf(draggedTab);
-
-  if (draggedTab.parentNode === tabList && currentIndex === targetIndex) {
-    return {
-      moved: false,
-      draggedBaseShiftX: 0
-    };
-  }
-
-  const beforeLeftMap = createTabLeftMap(siblingTabs);
-  const draggedLeftBefore = draggedTab.getBoundingClientRect().left;
-  const referenceNode = siblingTabs[targetIndex] ?? getTabEndReference(tabList);
-  moveTabToList({ tab: draggedTab, tabList, beforeNode: referenceNode });
-  const draggedLeftAfter = draggedTab.getBoundingClientRect().left;
-
-  if (animate) {
-    animateSiblingDisplacement(siblingTabs, beforeLeftMap);
-  }
-
-  return {
-    moved: true,
-    draggedBaseShiftX: draggedLeftAfter - draggedLeftBefore
-  };
-};
-
-const setElementTransform = (element, translateX, translateY) => {
-  if (!element) {
-    return;
-  }
-
-  element.style.transform = `translate3d(${translateX}px, ${translateY}px, 0px)`;
-};
-
 const createRect = (rect, padding) => ({
   left: rect.left - padding,
   right: rect.right + padding,
@@ -161,219 +94,78 @@ export const isPointInsideRect = ({ clientX, clientY, rect, padding = 0 }) => {
   );
 };
 
-export const shouldArmReattach = ({ clientY, detachOriginY, hysteresisPx = detachHysteresisPx }) =>
-  Math.abs(clientY - detachOriginY) >= hysteresisPx;
-
-export const shouldReattachToOriginalStrip = ({ reattachArmed, clientX, clientY, rect, padding = reentryPaddingPx }) =>
-  Boolean(reattachArmed) && isPointInsideRect({ clientX, clientY, rect, padding });
-
-export const shouldRemoveSourceWindowOnDetach = (tabCount) => tabCount === 1;
-export const shouldDetachOnDrop = ({ mode, detachIntentActive }) => mode === 'attached' && Boolean(detachIntentActive);
+export const shouldDetachOnDrop = ({ detachIntentActive }) => Boolean(detachIntentActive);
 export const resolveDetachIntent = ({ currentIntent, deltaY, thresholdPx = detachThresholdPx }) =>
   Boolean(currentIntent) || shouldDetachFromVerticalDelta(deltaY, thresholdPx);
 export const shouldCloseSourcePanelAfterTransfer = ({
   sourceTabCountAfterMove
 }) => sourceTabCountAfterMove === 0;
 
+export const shouldRemoveSourceWindowOnDetach = (sourceTabCount) => sourceTabCount === 1;
+
 export const resolveDragVisualOffsetY = ({ deltaY, detachIntentActive }) =>
   detachIntentActive ? deltaY : applyVerticalResistance(deltaY);
 
-const toRectSnapshot = (rect) => ({
-  left: rect.left,
-  top: rect.top,
-  width: rect.width,
-  height: rect.height
-});
+export const resolveDropDetachIntent = ({
+  detachIntentActive,
+  isDropInsideCurrentHeader,
+  didCrossWindowAttach
+}) => {
+  if (didCrossWindowAttach) {
+    return false;
+  }
 
-const createDragProxy = (draggedTab) => {
-  if (typeof document === 'undefined' || !document.body) {
+  return Boolean(detachIntentActive) && !Boolean(isDropInsideCurrentHeader);
+};
+
+export const resolveDropAttachTarget = ({
+  attachTargetTabList,
+  hoverAttachTabList,
+  sourceTabList,
+  dropClientX,
+  dropClientY,
+  hoverAttachClientX,
+  hoverAttachClientY,
+  fallbackRadiusPx = 48
+}) => {
+  if (attachTargetTabList && attachTargetTabList !== sourceTabList) {
+    return attachTargetTabList;
+  }
+
+  if (!hoverAttachTabList || hoverAttachTabList === sourceTabList) {
     return null;
   }
 
-  const draggedRect = draggedTab.getBoundingClientRect();
-  const dragProxy = draggedTab.cloneNode(true);
-  const isActive = draggedTab.classList.contains(activeTabClassName);
-  dragProxy.classList.add(dragProxyClassName, dragClassName, isActive ? activeDragClassName : inactiveDragClassName);
-  dragProxy.style.left = `${draggedRect.left}px`;
-  dragProxy.style.top = `${draggedRect.top}px`;
-  dragProxy.style.width = `${draggedRect.width}px`;
-  dragProxy.style.height = `${draggedRect.height}px`;
-  dragProxy.style.minWidth = `${draggedRect.width}px`;
-  dragProxy.style.maxWidth = `${draggedRect.width}px`;
-  dragProxy.style.transform = 'translate3d(0px, 0px, 0px)';
-  dragProxy.style.willChange = 'transform';
-  document.body.append(dragProxy);
-
-  return {
-    dragProxy,
-    dragProxyBaseRect: toRectSnapshot(draggedRect)
-  };
-};
-
-const removeDragProxy = (dragProxy) => {
-  if (!dragProxy) {
-    return;
+  if ('isConnected' in hoverAttachTabList && hoverAttachTabList.isConnected === false) {
+    return null;
   }
 
-  if (typeof dragProxy.remove === 'function') {
-    dragProxy.remove();
-  } else if (dragProxy.parentNode && typeof dragProxy.parentNode.removeChild === 'function') {
-    dragProxy.parentNode.removeChild(dragProxy);
-  }
-};
+  const resolvedDropClientX = toFiniteNumber(dropClientX, Number.NaN);
+  const resolvedDropClientY = toFiniteNumber(dropClientY, Number.NaN);
+  const resolvedHoverClientX = toFiniteNumber(hoverAttachClientX, Number.NaN);
+  const resolvedHoverClientY = toFiniteNumber(hoverAttachClientY, Number.NaN);
 
-const setDragProxyBaseRect = (dragState, rect) => {
-  if (!dragState.dragProxy) {
-    return;
-  }
+  if (
+    Number.isFinite(resolvedDropClientX) &&
+    Number.isFinite(resolvedDropClientY) &&
+    Number.isFinite(resolvedHoverClientX) &&
+    Number.isFinite(resolvedHoverClientY)
+  ) {
+    const deltaX = resolvedDropClientX - resolvedHoverClientX;
+    const deltaY = resolvedDropClientY - resolvedHoverClientY;
 
-  const snapshot = toRectSnapshot(rect);
-  dragState.dragProxyBaseRect = snapshot;
-  dragState.dragProxy.style.left = `${snapshot.left}px`;
-  dragState.dragProxy.style.top = `${snapshot.top}px`;
-  dragState.dragProxy.style.width = `${snapshot.width}px`;
-  dragState.dragProxy.style.height = `${snapshot.height}px`;
-  dragState.dragProxy.style.minWidth = `${snapshot.width}px`;
-  dragState.dragProxy.style.maxWidth = `${snapshot.width}px`;
-};
-
-const setDragVisualTransform = (dragState, translateX, translateY) => {
-  if (dragState.dragProxy) {
-    setElementTransform(dragState.dragProxy, translateX, translateY);
-    return;
+    if (Math.hypot(deltaX, deltaY) > fallbackRadiusPx) {
+      return null;
+    }
   }
 
-  setElementTransform(dragState.draggedTab, translateX, translateY);
+  return hoverAttachTabList;
 };
 
 export const getProxySettleDelta = ({ proxyRect, targetRect }) => ({
   deltaX: targetRect.left - proxyRect.left,
   deltaY: targetRect.top - proxyRect.top
 });
-
-const animateDragProxyToTarget = (dragState) => {
-  if (!dragState.dragProxy) {
-    return null;
-  }
-
-  const proxyRect = toRectSnapshot(dragState.dragProxy.getBoundingClientRect());
-  const targetRect = toRectSnapshot(dragState.draggedTab.getBoundingClientRect());
-  const settleDelta = getProxySettleDelta({
-    proxyRect,
-    targetRect
-  });
-  setDragProxyBaseRect(dragState, proxyRect);
-  setElementTransform(dragState.dragProxy, 0, 0);
-
-  if (Math.abs(settleDelta.deltaX) < 0.5 && Math.abs(settleDelta.deltaY) < 0.5) {
-    return null;
-  }
-
-  if (typeof dragState.dragProxy.animate !== 'function') {
-    setElementTransform(dragState.dragProxy, settleDelta.deltaX, settleDelta.deltaY);
-    return null;
-  }
-
-  return dragState.dragProxy.animate(
-    [
-      { transform: 'translate3d(0px, 0px, 0px)' },
-      { transform: `translate3d(${settleDelta.deltaX}px, ${settleDelta.deltaY}px, 0px)` }
-    ],
-    {
-      duration: scaleDurationMs(dragProxySettleDurationMs),
-      easing: 'ease',
-      fill: 'forwards'
-    }
-  );
-};
-
-const rebaseDragVisualAtPointer = (dragState, clientX, clientY) => {
-  if (dragState.dragProxy) {
-    setDragProxyBaseRect(dragState, dragState.dragProxy.getBoundingClientRect());
-  }
-
-  setDragVisualTransform(dragState, 0, 0);
-  dragState.startX = clientX;
-  dragState.startY = clientY;
-};
-
-const getAttachTargetTabList = ({ clientX, clientY, excludedTabList, padding = reentryPaddingPx }) => {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  const tabLists = Array.from(document.querySelectorAll(tabListSelector)).filter(
-    (tabList) => tabList !== excludedTabList && tabList.isConnected
-  );
-  const attachCandidates = tabLists
-    .map((tabList) => {
-      const panel = tabList.closest('.browser');
-
-      if (!panel || !panel.isConnected) {
-        return null;
-      }
-
-      return {
-        tabList,
-        panel
-      };
-    })
-    .filter(Boolean);
-
-  if (attachCandidates.length === 0) {
-    return null;
-  }
-
-  if (typeof document.elementsFromPoint === 'function') {
-    const layeredElements = document.elementsFromPoint(clientX, clientY);
-
-    for (const element of layeredElements) {
-      if (!(element instanceof Element)) {
-        continue;
-      }
-
-      const tabList = element.closest(tabListSelector);
-
-      if (tabList && tabLists.includes(tabList)) {
-        return tabList;
-      }
-
-      const panel = element.closest('.browser');
-
-      if (panel) {
-        const candidate = attachCandidates.find((attachCandidate) => attachCandidate.panel === panel);
-
-        if (candidate) {
-          return candidate.tabList;
-        }
-      }
-    }
-  }
-
-  const panelHitCandidate = attachCandidates.find((attachCandidate) =>
-    isPointInsideRect({
-      clientX,
-      clientY,
-      rect: attachCandidate.panel.getBoundingClientRect(),
-      padding: windowAttachPaddingPx
-    })
-  );
-
-  if (panelHitCandidate) {
-    return panelHitCandidate.tabList;
-  }
-
-  return (
-    attachCandidates.find((attachCandidate) =>
-      isPointInsideRect({
-        clientX,
-        clientY,
-        rect: attachCandidate.tabList.getBoundingClientRect(),
-        padding
-      })
-    )?.tabList ?? null
-  );
-};
 
 const suppressNextTabClick = () => {
   if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') {
@@ -392,41 +184,34 @@ const suppressNextTabClick = () => {
   document.addEventListener('click', onClickCapture, true);
 };
 
-const restoreDraggedTabStyles = (dragState) => {
-  const { draggedTab, initialInlineStyles } = dragState;
-
-  draggedTab.classList.remove(dragSourceClassName);
-  draggedTab.classList.remove(dragSourceVisibleClassName);
-  draggedTab.classList.remove(dragClassName, activeDragClassName, inactiveDragClassName);
-  draggedTab.style.transform = initialInlineStyles.transform;
-  draggedTab.style.transition = initialInlineStyles.transition;
-  draggedTab.style.flex = initialInlineStyles.flex;
-  draggedTab.style.minWidth = initialInlineStyles.minWidth;
-  draggedTab.style.maxWidth = initialInlineStyles.maxWidth;
-  draggedTab.style.willChange = initialInlineStyles.willChange;
-  draggedTab.style.zIndex = initialInlineStyles.zIndex;
-};
-
-const applyDragStyles = (dragState) => {
-  const { draggedTab } = dragState;
-  const draggedRect = draggedTab.getBoundingClientRect();
-  draggedTab.style.transition = 'none';
-  draggedTab.style.flex = `0 0 ${draggedRect.width}px`;
-  draggedTab.style.minWidth = `${draggedRect.width}px`;
-  draggedTab.style.maxWidth = `${draggedRect.width}px`;
-  const dragProxyState = createDragProxy(draggedTab);
-
-  if (dragProxyState) {
-    draggedTab.classList.add(dragSourceClassName);
-    dragState.dragProxy = dragProxyState.dragProxy;
-    dragState.dragProxyBaseRect = dragProxyState.dragProxyBaseRect;
-    return;
+const isPointerInsideCurrentHeader = ({ tabList, clientX, clientY, padding = windowAttachPaddingPx }) => {
+  if (!tabList || typeof tabList.closest !== 'function') {
+    return false;
   }
 
-  const isActive = draggedTab.classList.contains(activeTabClassName);
-  draggedTab.classList.add(dragClassName, isActive ? activeDragClassName : inactiveDragClassName);
-  draggedTab.style.willChange = 'transform';
-  draggedTab.style.zIndex = '6';
+  const panel = tabList.closest('.browser');
+  if (!panel) {
+    return false;
+  }
+
+  const tabRow = typeof panel.querySelector === 'function' ? panel.querySelector('.tab--row') : null;
+  const headerRect =
+    tabRow && typeof tabRow.getBoundingClientRect === 'function'
+      ? tabRow.getBoundingClientRect()
+      : typeof tabList.getBoundingClientRect === 'function'
+        ? tabList.getBoundingClientRect()
+        : null;
+
+  if (!headerRect) {
+    return false;
+  }
+
+  return isPointInsideRect({
+    clientX,
+    clientY,
+    rect: headerRect,
+    padding
+  });
 };
 
 export const initializeTabDrag = ({
@@ -444,6 +229,42 @@ export const initializeTabDrag = ({
 
   initializedRoots.add(root);
 
+  const dragDomAdapter = createDragDomAdapter({
+    activeTabClassName,
+    dragClassName,
+    activeDragClassName,
+    inactiveDragClassName,
+    dragSourceClassName,
+    dragSourceVisibleClassName,
+    dragProxyClassName
+  });
+  const animationCoordinator = createAnimationCoordinator({
+    scaleDurationMs,
+    getProxySettleDelta,
+    animateDetachedWindowFromTab,
+    dragProxySettleDurationMs
+  });
+  const layoutPipeline = createLayoutPipeline({
+    getTabs,
+    getInsertionIndexFromCenters,
+    moveTabToList,
+    tabAddSelector
+  });
+  const dropResolver = createDropResolver({
+    tabListSelector,
+    defaultAttachPaddingPx: reentryPaddingPx
+  });
+  const windowLifecycle = createWindowLifecycle({
+    getTabs,
+    createDetachedWindow,
+    removeDetachedWindowIfEmpty,
+    removePanel,
+    shouldCloseSourcePanelAfterTransfer,
+    initializePanelInteraction,
+    initializeTabList,
+    animateDetachedWindowEnter: animationCoordinator.animateDetachedWindowEnter
+  });
+
   let dragState = null;
   let frameRequestId = 0;
   let queuedClientX = 0;
@@ -456,12 +277,27 @@ export const initializeTabDrag = ({
     window.removeEventListener('pointercancel', onPointerUp);
   };
 
+  const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
+    layoutPipeline.beginFrame();
+    const moveResult = layoutPipeline.moveTabToPointerPosition({
+      tabList,
+      draggedTab,
+      pointerClientX
+    });
+
+    if (moveResult.moved) {
+      animationCoordinator.animateSiblingDisplacement(moveResult.displacements);
+    }
+
+    return moveResult;
+  };
+
   const finishDrag = () => {
     if (!dragState) {
       return;
     }
 
-    const completedState = dragState;
+    const completedState = transitionSessionToSettling(dragState);
     dragState = null;
     hasQueuedPointer = false;
     clearGlobalListeners();
@@ -482,99 +318,114 @@ export const initializeTabDrag = ({
       return;
     }
 
-    const releasedProxyRect = completedState.dragProxy
-      ? toRectSnapshot(completedState.dragProxy.getBoundingClientRect())
-      : toRectSnapshot(completedState.draggedTab.getBoundingClientRect());
+    const cleanupVisualState = () => {
+      dragDomAdapter.cleanupVisualState(completedState);
+    };
 
-    const detachOnDrop = () => {
-      const sourceTabList = completedState.currentTabList;
-      const sourcePanel = sourceTabList instanceof Element ? sourceTabList.closest('.browser') : null;
-
-      if (!sourceTabList || !sourcePanel) {
-        return null;
-      }
-
-      const sourceTabRect = toRectSnapshot(completedState.draggedTab.getBoundingClientRect());
-      const attachTargetTabList = getAttachTargetTabList({
-        clientX: completedState.lastClientX,
-        clientY: completedState.lastClientY,
-        excludedTabList: sourceTabList
+    const settleVisualState = () => {
+      const settleAnimation = animationCoordinator.animateProxySettleToTarget({
+        dragProxy: completedState.dragProxy,
+        draggedTab: completedState.draggedTab,
+        toRectSnapshot: dragDomAdapter.toRectSnapshot,
+        setDragProxyBaseRect: (rect) => {
+          dragDomAdapter.setDragProxyBaseRect(completedState, rect);
+        },
+        setElementTransform: dragDomAdapter.setElementTransform
       });
 
-      if (attachTargetTabList) {
-        moveTabToPointerPosition({
-          tabList: attachTargetTabList,
+      animationCoordinator.finalizeOnAnimationSettled(settleAnimation, cleanupVisualState);
+    };
+
+    if (isSessionDetachedDrag(completedState) && completedState.detachedPanel) {
+      const resolvedAttachTarget = dropResolver.resolveAttachTargetTabList({
+        clientX: completedState.lastClientX,
+        clientY: completedState.lastClientY,
+        excludedTabList: completedState.currentTabList,
+        padding: windowAttachPaddingPx
+      });
+      const attachTarget = resolveDropAttachTarget({
+        attachTargetTabList: resolvedAttachTarget,
+        hoverAttachTabList: completedState.hoverAttachTabList,
+        sourceTabList: completedState.currentTabList,
+        dropClientX: completedState.lastClientX,
+        dropClientY: completedState.lastClientY,
+        hoverAttachClientX: completedState.hoverAttachClientX,
+        hoverAttachClientY: completedState.hoverAttachClientY
+      });
+
+      if (attachTarget) {
+        moveTabWithLayoutPipeline({
+          tabList: attachTarget,
           draggedTab: completedState.draggedTab,
-          pointerClientX: completedState.lastClientX,
-          animate: true
+          pointerClientX: completedState.lastClientX
         });
-
-        if (
-          shouldCloseSourcePanelAfterTransfer({
-            sourceTabCountAfterMove: getTabs(sourceTabList).length
-          })
-        ) {
-          removePanel(sourcePanel);
-        }
-
-        return 'attach';
+        removePanel(completedState.detachedPanel);
       }
 
-      const detachedWindow = createDetachedWindow({
+      settleVisualState();
+
+      if (completedState.dragMoved) {
+        suppressNextTabClick();
+      }
+
+      return;
+    }
+
+    const sourceTabList = completedState.currentTabList;
+    const sourcePanel =
+      sourceTabList && typeof sourceTabList.closest === 'function' ? sourceTabList.closest('.browser') : null;
+    const resolvedAttachTargetTabList = dropResolver.resolveAttachTargetTabList({
+      clientX: completedState.lastClientX,
+      clientY: completedState.lastClientY,
+      excludedTabList: sourceTabList,
+      padding: windowAttachPaddingPx
+    });
+    const attachTargetTabList = resolveDropAttachTarget({
+      attachTargetTabList: resolvedAttachTargetTabList,
+      hoverAttachTabList: completedState.hoverAttachTabList,
+      sourceTabList,
+      dropClientX: completedState.lastClientX,
+      dropClientY: completedState.lastClientY,
+      hoverAttachClientX: completedState.hoverAttachClientX,
+      hoverAttachClientY: completedState.hoverAttachClientY
+    });
+    const dropInsideCurrentHeader = isPointerInsideCurrentHeader({
+      tabList: sourceTabList,
+      clientX: completedState.lastClientX,
+      clientY: completedState.lastClientY
+    });
+    const detachIntentForDrop = resolveDropDetachIntent({
+      detachIntentActive: shouldDetachOnDrop(completedState),
+      isDropInsideCurrentHeader: dropInsideCurrentHeader,
+      didCrossWindowAttach: completedState.didCrossWindowAttach
+    });
+    const dropDestination = dropResolver.resolveDropDestination({
+      detachIntentActive: detachIntentForDrop,
+      attachTargetTabList
+    });
+
+    if (dropDestination === 'attach' && sourceTabList && sourcePanel) {
+      moveTabWithLayoutPipeline({
+        tabList: attachTargetTabList,
+        draggedTab: completedState.draggedTab,
+        pointerClientX: completedState.lastClientX
+      });
+      windowLifecycle.closeSourcePanelIfEmpty({
+        sourcePanel,
+        sourceTabList
+      });
+    } else if (dropDestination === 'detach' && sourceTabList && sourcePanel) {
+      const sourceTabRect = dragDomAdapter.toRectSnapshot(completedState.draggedTab.getBoundingClientRect());
+      const detachedWindow = windowLifecycle.createDetachedWindowFromDrop({
         sourcePanel,
         sourceTabList,
         draggedTab: completedState.draggedTab,
         pointerClientX: completedState.lastClientX,
-        pointerClientY: completedState.lastClientY
+        pointerClientY: completedState.lastClientY,
+        sourceTabRect
       });
 
-      if (!detachedWindow) {
-        return null;
-      }
-
-      initializePanelInteraction(detachedWindow.panel);
-      initializeTabList(detachedWindow.tabList);
-
-      if (
-        shouldCloseSourcePanelAfterTransfer({
-          sourceTabCountAfterMove: getTabs(sourceTabList).length
-        })
-      ) {
-        removePanel(sourcePanel);
-      }
-
-      animateDetachedWindowFromTab({
-        panel: detachedWindow.panel,
-        tabRect: sourceTabRect,
-        frame: detachedWindow.frame
-      });
-
-      return 'detach';
-    };
-
-    if (completedState.mode === 'detached' && completedState.detachedPanel) {
-      const panelRect = completedState.detachedPanel.getBoundingClientRect();
-      animateDetachedWindowFromTab({
-        panel: completedState.detachedPanel,
-        tabRect: releasedProxyRect,
-        frame: {
-          width: panelRect.width,
-          height: panelRect.height,
-          left: panelRect.left,
-          top: panelRect.top
-        }
-      });
-    }
-
-    const cleanupVisualState = () => {
-      restoreDraggedTabStyles(completedState);
-      removeDragProxy(completedState.dragProxy);
-    };
-
-    if (shouldDetachOnDrop(completedState)) {
-      const dropDetachMode = detachOnDrop();
-
-      if (dropDetachMode === 'detach') {
+      if (detachedWindow) {
         cleanupVisualState();
 
         if (completedState.dragMoved) {
@@ -585,52 +436,11 @@ export const initializeTabDrag = ({
       }
     }
 
-    const settleAnimation = animateDragProxyToTarget(completedState);
-
-    if (settleAnimation && typeof settleAnimation.addEventListener === 'function') {
-      let didCleanup = false;
-      const onAnimationSettled = () => {
-        if (didCleanup) {
-          return;
-        }
-
-        didCleanup = true;
-        cleanupVisualState();
-      };
-      settleAnimation.addEventListener('finish', onAnimationSettled);
-      settleAnimation.addEventListener('cancel', onAnimationSettled);
-    } else {
-      cleanupVisualState();
-    }
+    settleVisualState();
 
     if (completedState.dragMoved) {
       suppressNextTabClick();
     }
-  };
-
-  const attachToTabList = (nextTabList, clientX, clientY) => {
-    if (!dragState || dragState.mode !== 'detached' || !dragState.detachedPanel || !nextTabList) {
-      return;
-    }
-
-    moveTabToPointerPosition({
-      tabList: nextTabList,
-      draggedTab: dragState.draggedTab,
-      pointerClientX: clientX,
-      animate: true
-    });
-
-    removeDetachedWindowIfEmpty(dragState.detachedPanel);
-    dragState.mode = 'attached';
-    dragState.currentTabList = nextTabList;
-    dragState.detachOriginY = clientY;
-    dragState.reattachArmed = false;
-    dragState.detachedPanel = null;
-    dragState.detachedPanelWidth = 0;
-    dragState.detachedPanelHeight = 0;
-    dragState.detachedAnchorOffsetX = 0;
-    dragState.detachedAnchorOffsetY = 0;
-    rebaseDragVisualAtPointer(dragState, clientX, clientY);
   };
 
   const applyAttachedDragSample = (clientX, clientY) => {
@@ -641,36 +451,148 @@ export const initializeTabDrag = ({
     const deltaX = clientX - dragState.startX;
     const deltaY = clientY - dragState.startY;
 
-    dragState.detachIntentActive = resolveDetachIntent({
-      currentIntent: dragState.detachIntentActive,
-      deltaY
-    });
+    if (dragState.reattachArmed) {
+      dragState.detachIntentActive = resolveDetachIntent({
+        currentIntent: dragState.detachIntentActive,
+        deltaY
+      });
+    } else if (Math.abs(deltaY) < detachThresholdPx * 0.5) {
+      dragState.reattachArmed = true;
+    }
 
     if (dragState.dragProxy) {
-      dragState.draggedTab.classList.toggle(dragSourceVisibleClassName, dragState.detachIntentActive);
+      const isLastTab = shouldRemoveSourceWindowOnDetach(dragState.sourceTabCount);
+      dragState.draggedTab.classList.toggle(dragDomAdapter.dragSourceVisibleClassName, dragState.detachIntentActive && !isLastTab);
+
+      if (dragState.detachIntentActive && isLastTab) {
+        const sourcePanel = dragState.draggedTab.closest('.browser');
+        if (sourcePanel) {
+          const panelRect = sourcePanel.getBoundingClientRect();
+          dragState = transitionSessionToDetachedDrag(dragState, {
+            detachedPanel: sourcePanel,
+            detachedPanelWidth: panelRect.width,
+            detachedPanelHeight: panelRect.height,
+            detachedAnchorOffsetX: clientX - panelRect.left,
+            detachedAnchorOffsetY: clientY - panelRect.top,
+            reattachArmed: false
+          });
+          dragDomAdapter.rebaseDragVisualAtPointer(dragState, clientX, clientY);
+          return;
+        }
+      }
     }
 
     const visualOffsetY = resolveDragVisualOffsetY({
       deltaY,
       detachIntentActive: dragState.detachIntentActive
     });
-    setDragVisualTransform(dragState, deltaX, visualOffsetY);
+    dragDomAdapter.setDragVisualTransform(dragState, deltaX, visualOffsetY);
+
+    if (attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
+      return;
+    }
 
     if (dragState.detachIntentActive) {
       return;
     }
 
-    const moveResult = moveTabToPointerPosition({
+    const moveResult = moveTabWithLayoutPipeline({
       tabList: dragState.currentTabList,
       draggedTab: dragState.draggedTab,
-      pointerClientX: clientX,
-      animate: true
+      pointerClientX: clientX
     });
 
     if (!dragState.dragProxy && moveResult.moved) {
       dragState.startX += moveResult.draggedBaseShiftX;
-      setDragVisualTransform(dragState, clientX - dragState.startX, visualOffsetY);
+      dragDomAdapter.setDragVisualTransform(dragState, clientX - dragState.startX, visualOffsetY);
     }
+  };
+
+  const attachToTabList = (nextTabList, clientX, clientY) => {
+    if (!dragState || !isSessionDetachedDrag(dragState) || !dragState.detachedPanel || !nextTabList) {
+      return;
+    }
+
+    moveTabWithLayoutPipeline({
+      tabList: nextTabList,
+      draggedTab: dragState.draggedTab,
+      pointerClientX: clientX
+    });
+
+    windowLifecycle.maybeRemoveDetachedPanel(dragState.detachedPanel);
+    dragState = transitionSessionToAttachedDrag(dragState, {
+      currentTabList: nextTabList,
+      sourceTabCount: getTabs(nextTabList).length,
+      detachIntentActive: false,
+      reattachArmed: false,
+      didCrossWindowAttach: true,
+      hoverAttachTabList: null,
+      hoverAttachClientX: 0,
+      hoverAttachClientY: 0,
+      detachedPanel: null,
+      detachedPanelWidth: 0,
+      detachedPanelHeight: 0,
+      detachedAnchorOffsetX: 0,
+      detachedAnchorOffsetY: 0
+    });
+    dragDomAdapter.rebaseDragVisualAtPointer(dragState, clientX, clientY);
+  };
+
+  const attachToHoveredTabListFromAttachedDrag = (clientX, clientY) => {
+    if (!dragState || !isSessionAttachedDrag(dragState)) {
+      return false;
+    }
+
+    const sourceTabList = dragState.currentTabList;
+    const attachTarget = dropResolver.resolveAttachTargetTabList({
+      clientX,
+      clientY,
+      excludedTabList: sourceTabList,
+      padding: windowAttachPaddingPx
+    });
+
+    if (attachTarget) {
+      dragState.hoverAttachTabList = attachTarget;
+      dragState.hoverAttachClientX = clientX;
+      dragState.hoverAttachClientY = clientY;
+    }
+
+    if (!attachTarget) {
+      return false;
+    }
+
+    const sourcePanel =
+      sourceTabList && typeof sourceTabList.closest === 'function' ? sourceTabList.closest('.browser') : null;
+    moveTabWithLayoutPipeline({
+      tabList: attachTarget,
+      draggedTab: dragState.draggedTab,
+      pointerClientX: clientX
+    });
+
+    if (sourcePanel && sourceTabList !== attachTarget) {
+      windowLifecycle.closeSourcePanelIfEmpty({
+        sourcePanel,
+        sourceTabList
+      });
+    }
+
+    dragState = transitionSessionToAttachedDrag(dragState, {
+      currentTabList: attachTarget,
+      sourceTabCount: getTabs(attachTarget).length,
+      detachIntentActive: false,
+      reattachArmed: false,
+      didCrossWindowAttach: true,
+      hoverAttachTabList: null,
+      hoverAttachClientX: 0,
+      hoverAttachClientY: 0,
+      detachedPanel: null,
+      detachedPanelWidth: 0,
+      detachedPanelHeight: 0,
+      detachedAnchorOffsetX: 0,
+      detachedAnchorOffsetY: 0
+    });
+    dragDomAdapter.rebaseDragVisualAtPointer(dragState, clientX, clientY);
+    return true;
   };
 
   const applyDetachedDragSample = (clientX, clientY) => {
@@ -678,9 +600,10 @@ export const initializeTabDrag = ({
       return;
     }
 
-    const detachedDeltaX = clientX - dragState.startX;
-    const detachedDeltaY = clientY - dragState.startY;
-    setDragVisualTransform(dragState, detachedDeltaX, detachedDeltaY);
+    const deltaX = clientX - dragState.startX;
+    const deltaY = clientY - dragState.startY;
+    dragDomAdapter.setDragVisualTransform(dragState, deltaX, deltaY);
+
     const frame = computeDetachedPanelFrame({
       pointerClientX: clientX,
       pointerClientY: clientY,
@@ -689,27 +612,22 @@ export const initializeTabDrag = ({
       anchorOffsetX: dragState.detachedAnchorOffsetX,
       anchorOffsetY: dragState.detachedAnchorOffsetY
     });
-
     applyPanelFrame(dragState.detachedPanel, frame);
-    if (!dragState.reattachArmed) {
-      dragState.reattachArmed = shouldArmReattach({
-        clientY,
-        detachOriginY: dragState.detachOriginY
-      });
-    }
 
-    if (!dragState.reattachArmed) {
-      return;
-    }
-
-    const attachTargetTabList = getAttachTargetTabList({
+    const attachTarget = dropResolver.resolveAttachTargetTabList({
       clientX,
       clientY,
-      excludedTabList: dragState.currentTabList
+      excludedTabList: dragState.currentTabList,
+      padding: reentryPaddingPx
     });
+    if (attachTarget) {
+      dragState.hoverAttachTabList = attachTarget;
+      dragState.hoverAttachClientX = clientX;
+      dragState.hoverAttachClientY = clientY;
+    }
 
-    if (attachTargetTabList) {
-      attachToTabList(attachTargetTabList, clientX, clientY);
+    if (attachTarget) {
+      attachToTabList(attachTarget, clientX, clientY);
     }
   };
 
@@ -725,9 +643,8 @@ export const initializeTabDrag = ({
       return;
     }
 
-    dragState.dragStarted = true;
-    dragState.dragMoved = true;
-    applyDragStyles(dragState);
+    dragState = markSessionAsActivated(dragState);
+    dragDomAdapter.applyDragStyles(dragState);
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = 'none';
@@ -750,12 +667,11 @@ export const initializeTabDrag = ({
       return;
     }
 
-    if (dragState.mode === 'detached') {
+    if (isSessionDetachedDrag(dragState)) {
       applyDetachedDragSample(clientX, clientY);
-      return;
+    } else if (isSessionAttachedDrag(dragState)) {
+      applyAttachedDragSample(clientX, clientY);
     }
-
-    applyAttachedDragSample(clientX, clientY);
   };
 
   const processDragFrame = () => {
@@ -839,27 +755,13 @@ export const initializeTabDrag = ({
       }
     }
 
-    dragState = {
+    dragState = createDragSession({
       pointerId: event.pointerId,
       draggedTab,
       currentTabList: tabList,
-      detachedPanel: null,
-      detachedPanelWidth: 0,
-      detachedPanelHeight: 0,
-      detachedAnchorOffsetX: 0,
-      detachedAnchorOffsetY: 0,
-      dragProxy: null,
-      dragProxyBaseRect: null,
-      dragStarted: false,
-      dragMoved: false,
-      detachIntentActive: false,
-      mode: 'attached',
+      sourceTabCount: getTabs(tabList).length,
       startX: event.clientX,
       startY: event.clientY,
-      lastClientX: event.clientX,
-      lastClientY: event.clientY,
-      detachOriginY: event.clientY,
-      reattachArmed: false,
       initialUserSelect: typeof document !== 'undefined' && document.body ? document.body.style.userSelect : '',
       initialInlineStyles: {
         transform: draggedTab.style.transform,
@@ -870,7 +772,7 @@ export const initializeTabDrag = ({
         willChange: draggedTab.style.willChange,
         zIndex: draggedTab.style.zIndex
       }
-    };
+    });
 
     queuedClientX = event.clientX;
     queuedClientY = event.clientY;
