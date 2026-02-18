@@ -167,21 +167,37 @@ export const getProxySettleDelta = ({ proxyRect, targetRect }) => ({
   deltaY: targetRect.top - proxyRect.top
 });
 
-const suppressNextTabClick = () => {
-  if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') {
-    return;
-  }
+const createClickSuppressor = () => {
+  let activeListener = null;
 
-  const onClickCapture = (event) => {
-    if (isEventTargetElement(event.target) && event.target.closest(tabSelector)) {
-      event.preventDefault();
-      event.stopPropagation();
+  const suppress = () => {
+    cancel();
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') {
+      return;
     }
 
-    document.removeEventListener('click', onClickCapture, true);
+    const onClickCapture = (event) => {
+      if (isEventTargetElement(event.target) && event.target.closest(tabSelector)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      activeListener = null;
+      document.removeEventListener('click', onClickCapture, true);
+    };
+
+    activeListener = onClickCapture;
+    document.addEventListener('click', onClickCapture, true);
   };
 
-  document.addEventListener('click', onClickCapture, true);
+  const cancel = () => {
+    if (activeListener) {
+      document.removeEventListener('click', activeListener, true);
+      activeListener = null;
+    }
+  };
+
+  return { suppress, cancel };
 };
 
 const isPointerInsideCurrentHeader = ({ tabList, clientX, clientY, padding = windowAttachPaddingPx }) => {
@@ -252,6 +268,7 @@ export const initializeTabDrag = ({
     tabListSelector,
     defaultAttachPaddingPx: reentryPaddingPx
   });
+  const clickSuppressor = createClickSuppressor();
   let dragState = null;
   let frameRequestId = 0;
   let queuedClientX = 0;
@@ -636,7 +653,7 @@ export const initializeTabDrag = ({
         cleanupVisualState();
 
         if (completedState.dragMoved) {
-          suppressNextTabClick();
+          clickSuppressor.suppress();
         }
 
         return;
@@ -650,7 +667,7 @@ export const initializeTabDrag = ({
     settleVisualState();
 
     if (completedState.dragMoved) {
-      suppressNextTabClick();
+      clickSuppressor.suppress();
     }
   };
 
@@ -878,6 +895,8 @@ export const initializeTabDrag = ({
     if (!sourcePanel) {
       return;
     }
+
+    clickSuppressor.cancel();
 
     if (typeof draggedTab.setPointerCapture === 'function') {
       try {
