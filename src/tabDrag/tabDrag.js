@@ -1,31 +1,66 @@
-import { scaleDurationMs } from './motionSpeed';
-import { activeTabClassName } from './tabState';
-import { getTabs, setActiveTab, tabListSelector, tabSelector } from './tabs';
+import { isEventTargetElement } from '../shared/dom';
+import { scaleDurationMs } from '../motion/motionSpeed';
+import { activeTabClassName } from '../tabs/tabState';
+import { getTabs, setActiveTab, tabListSelector, tabSelector } from '../tabs/tabs';
 import {
   animateDetachedWindowFromTab,
   createDetachedWindow,
   moveTabToList
-} from './windowManager';
-import { removePanel } from './windowControls';
+} from '../window/windowManager';
+import { removePanel } from '../window/windowControls';
 import {
   createDragSession,
   isSessionAttachedDrag,
   markSessionAsActivated,
-  transitionSessionToAttachedDrag,
   transitionSessionToSettling
-} from './tabDrag/dragSessionStateMachine';
-import { createLayoutPipeline } from './tabDrag/layoutPipeline';
-import { createDropResolver, isPointInsideRect } from './tabDrag/dropResolver';
-import { createAnimationCoordinator } from './tabDrag/animationCoordinator';
-import { createDragDomAdapter } from './tabDrag/dragDomAdapter';
-import { clearDragCompleted, signalDragCompleted } from './tabDragSignal';
+} from './dragSessionStateMachine';
+import { createLayoutPipeline } from './layoutPipeline';
+import { createDropResolver, isPointInsideRect } from './dropResolver';
+import { createAnimationCoordinator } from './animationCoordinator';
+import { createDragDomAdapter } from './dragDomAdapter';
+import { clearDragCompleted, signalDragCompleted } from '../tabs/tabDragSignal';
+import {
+  dragActivationDistancePx,
+  detachThresholdPx,
+  reentryPaddingPx,
+  windowAttachPaddingPx,
+  getInsertionIndexFromCenters,
+  getProxySettleDelta,
+  resolveDetachIntent,
+  resolveDropAttachTarget,
+  resolveDropDetachIntent,
+  resolveDragVisualOffsetY,
+  resolveSourceActivationIndexAfterDetach,
+  shouldCloseSourcePanelAfterTransfer,
+  shouldDetachOnDrop,
+  shouldRemoveSourceWindowOnDetach
+} from './dragCalculations';
+import { createHoverPreviewManager } from './hoverPreviewManager';
+import { createDetachPlaceholderManager } from './detachPlaceholder';
+import { createDragVisualWidthManager } from './dragVisualWidth';
 
-export const dragActivationDistancePx = 3;
-export const detachThresholdPx = 56;
-export const reentryPaddingPx = 16;
-export const windowAttachPaddingPx = 12;
-export const verticalResistanceFactor = 0.22;
-export const verticalResistanceMaxPx = 30;
+export {
+  dragActivationDistancePx,
+  detachThresholdPx,
+  reentryPaddingPx,
+  windowAttachPaddingPx,
+  applyVerticalResistance,
+  shouldDetachFromVerticalDelta,
+  verticalResistanceFactor,
+  verticalResistanceMaxPx,
+  getInsertionIndexFromCenters,
+  getProxySettleDelta,
+  resolveDetachIntent,
+  resolveDropAttachTarget,
+  resolveDropDetachIntent,
+  resolveDragVisualOffsetY,
+  resolveHoverPreviewWidthPx,
+  resolveSourceActivationIndexAfterDetach,
+  shouldCloseSourcePanelAfterTransfer,
+  shouldDetachOnDrop,
+  shouldRemoveSourceWindowOnDetach
+} from './dragCalculations';
+
 const dragProxySettleDurationMs = 140;
 const dragResizeTransitionDurationMs = 110;
 const detachCollapseDurationMs = 150;
@@ -41,134 +76,6 @@ const bodyDraggingClassName = 'body--tab-dragging';
 const tabAddSelector = '.tab--add';
 const closeButtonSelector = '.tab--close';
 const initializedRoots = new WeakSet();
-
-const toFiniteNumber = (value, fallbackValue = 0) => {
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
-};
-
-const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum);
-
-export const applyVerticalResistance = (
-  deltaY,
-  resistanceFactor = verticalResistanceFactor,
-  maximumOffsetPx = verticalResistanceMaxPx
-) => {
-  const scaledDelta = toFiniteNumber(deltaY, 0) * resistanceFactor;
-  return clamp(scaledDelta, -maximumOffsetPx, maximumOffsetPx);
-};
-
-export const shouldDetachFromVerticalDelta = (deltaY, thresholdPx = detachThresholdPx) =>
-  Math.abs(toFiniteNumber(deltaY, 0)) >= thresholdPx;
-
-export const getInsertionIndexFromCenters = ({ centers, pointerClientX }) => {
-  const resolvedPointerX = toFiniteNumber(pointerClientX, 0);
-
-  for (let index = 0; index < centers.length; index += 1) {
-    if (resolvedPointerX < centers[index]) {
-      return index;
-    }
-  }
-
-  return centers.length;
-};
-
-const isEventTargetElement = (target) =>
-  Boolean(target) && typeof target === 'object' && typeof target.closest === 'function';
-
-export const shouldDetachOnDrop = ({ detachIntentActive }) => Boolean(detachIntentActive);
-export const resolveDetachIntent = ({ currentIntent, deltaY, thresholdPx = detachThresholdPx }) =>
-  Boolean(currentIntent) || shouldDetachFromVerticalDelta(deltaY, thresholdPx);
-export const shouldCloseSourcePanelAfterTransfer = ({
-  sourceTabCountAfterMove
-}) => sourceTabCountAfterMove === 0;
-
-export const shouldRemoveSourceWindowOnDetach = (sourceTabCount) => sourceTabCount === 1;
-
-export const resolveSourceActivationIndexAfterDetach = (draggedTabIndex, remainingTabCount) => {
-  if (remainingTabCount === 0) {
-    return -1;
-  }
-  return Math.max(0, draggedTabIndex - 1);
-};
-
-export const resolveDragVisualOffsetY = ({ deltaY, detachIntentActive }) =>
-  detachIntentActive ? deltaY : applyVerticalResistance(deltaY);
-
-export const resolveHoverPreviewWidthPx = ({ dragProxyBaseRect, draggedTab }) => {
-  const proxyBaseWidth = toFiniteNumber(dragProxyBaseRect?.width, 0);
-  if (proxyBaseWidth > 0) {
-    return proxyBaseWidth;
-  }
-
-  if (draggedTab && typeof draggedTab.getBoundingClientRect === 'function') {
-    return toFiniteNumber(draggedTab.getBoundingClientRect().width, 0);
-  }
-
-  return 0;
-};
-
-export const resolveDropDetachIntent = ({
-  detachIntentActive,
-  isDropInsideCurrentHeader,
-  didCrossWindowAttach
-}) => {
-  if (didCrossWindowAttach) {
-    return false;
-  }
-
-  return Boolean(detachIntentActive) && !Boolean(isDropInsideCurrentHeader);
-};
-
-export const resolveDropAttachTarget = ({
-  attachTargetTabList,
-  hoverAttachTabList,
-  sourceTabList,
-  dropClientX,
-  dropClientY,
-  hoverAttachClientX,
-  hoverAttachClientY,
-  fallbackRadiusPx = 48
-}) => {
-  if (attachTargetTabList && attachTargetTabList !== sourceTabList) {
-    return attachTargetTabList;
-  }
-
-  if (!hoverAttachTabList || hoverAttachTabList === sourceTabList) {
-    return null;
-  }
-
-  if ('isConnected' in hoverAttachTabList && hoverAttachTabList.isConnected === false) {
-    return null;
-  }
-
-  const resolvedDropClientX = toFiniteNumber(dropClientX, Number.NaN);
-  const resolvedDropClientY = toFiniteNumber(dropClientY, Number.NaN);
-  const resolvedHoverClientX = toFiniteNumber(hoverAttachClientX, Number.NaN);
-  const resolvedHoverClientY = toFiniteNumber(hoverAttachClientY, Number.NaN);
-
-  if (
-    Number.isFinite(resolvedDropClientX) &&
-    Number.isFinite(resolvedDropClientY) &&
-    Number.isFinite(resolvedHoverClientX) &&
-    Number.isFinite(resolvedHoverClientY)
-  ) {
-    const deltaX = resolvedDropClientX - resolvedHoverClientX;
-    const deltaY = resolvedDropClientY - resolvedHoverClientY;
-
-    if (Math.hypot(deltaX, deltaY) > fallbackRadiusPx) {
-      return null;
-    }
-  }
-
-  return hoverAttachTabList;
-};
-
-export const getProxySettleDelta = ({ proxyRect, targetRect }) => ({
-  deltaX: targetRect.left - proxyRect.left,
-  deltaY: targetRect.top - proxyRect.top
-});
-
 
 const isPointerInsideCurrentHeader = ({ tabList, clientX, clientY, padding = windowAttachPaddingPx }) => {
   if (!tabList || typeof tabList.closest !== 'function') {
@@ -238,291 +145,32 @@ export const initializeTabDrag = ({
     tabListSelector,
     defaultAttachPaddingPx: reentryPaddingPx
   });
+  const hoverPreview = createHoverPreviewManager({
+    scaleDurationMs,
+    hoverPreviewExpandDurationMs,
+    tabItemClassName: tabSelector.slice(1),
+    dragHoverPreviewClassName
+  });
+  const placeholderManager = createDetachPlaceholderManager({
+    scaleDurationMs,
+    detachCollapseDurationMs
+  });
+  const visualWidth = createDragVisualWidthManager({
+    scaleDurationMs,
+    dragResizeTransitionDurationMs
+  });
+
   let dragState = null;
   let frameRequestId = 0;
   let queuedClientX = 0;
   let queuedClientY = 0;
   let hasQueuedPointer = false;
   let sourceWindowRemovedDuringDetach = false;
-  let hoverAttachPreviewTab = null;
-  let hoverAttachPreviewTabList = null;
-  let hoverPreviewExpanding = false;
-  let hoverPreviewAnimation = null;
-  let collapsingPreviewElement = null;
-  let dragVisualResizeTransitionEnabled = false;
-  let detachPlaceholder = null;
-  let detachPlaceholderCollapsed = false;
 
   const clearGlobalListeners = () => {
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerUp);
-  };
-
-  const cancelHoverPreviewAnimation = () => {
-    if (hoverPreviewAnimation) {
-      hoverPreviewAnimation.cancel();
-      hoverPreviewAnimation = null;
-    }
-  };
-
-  const removeCollapsingPreview = () => {
-    if (!collapsingPreviewElement) {
-      return;
-    }
-    const el = collapsingPreviewElement;
-    collapsingPreviewElement = null;
-    el.getAnimations?.().forEach((a) => a.cancel());
-    el.remove();
-  };
-
-  const clearHoverAttachPreview = () => {
-    removeCollapsingPreview();
-
-    if (!hoverAttachPreviewTab) {
-      return;
-    }
-
-    cancelHoverPreviewAnimation();
-
-    if (typeof hoverAttachPreviewTab.remove === 'function') {
-      hoverAttachPreviewTab.remove();
-    } else if (
-      hoverAttachPreviewTab.parentNode &&
-      typeof hoverAttachPreviewTab.parentNode.removeChild === 'function'
-    ) {
-      hoverAttachPreviewTab.parentNode.removeChild(hoverAttachPreviewTab);
-    }
-
-    hoverAttachPreviewTab = null;
-    hoverAttachPreviewTabList = null;
-    hoverPreviewExpanding = false;
-  };
-
-  const createHoverAttachPreviewTab = () => {
-    if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
-      return null;
-    }
-
-    const previewTab = document.createElement('div');
-    previewTab.className = `${tabSelector.slice(1)} ${dragHoverPreviewClassName}`;
-    previewTab.setAttribute('aria-hidden', 'true');
-    previewTab.tabIndex = -1;
-    previewTab.style.opacity = '0';
-    previewTab.style.pointerEvents = 'none';
-    previewTab.style.overflow = 'hidden';
-    previewTab.style.transition = 'none';
-    previewTab.style.flex = '0 1 var(--tab-default-width)';
-    previewTab.style.minWidth = '0';
-    previewTab.style.maxWidth = '0';
-
-    return previewTab;
-  };
-
-  const expandHoverAttachPreview = (session) => {
-    if (!hoverAttachPreviewTab) {
-      return;
-    }
-
-    const targetWidthPx = resolveHoverPreviewWidthPx(session);
-    if (targetWidthPx <= 0) {
-      return;
-    }
-
-    hoverPreviewExpanding = true;
-    cancelHoverPreviewAnimation();
-
-    const previewTab = hoverAttachPreviewTab;
-    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-
-    if (typeof previewTab.animate !== 'function') {
-      previewTab.style.maxWidth = '';
-      previewTab.style.minWidth = '';
-      hoverPreviewExpanding = false;
-      return;
-    }
-
-    hoverPreviewAnimation = previewTab.animate(
-      [{ maxWidth: '0px' }, { maxWidth: `${targetWidthPx}px` }],
-      { duration: durationMs, easing: 'ease', fill: 'forwards' }
-    );
-
-    const onFinish = () => {
-      if (hoverAttachPreviewTab !== previewTab) {
-        return;
-      }
-      hoverPreviewExpanding = false;
-      hoverPreviewAnimation = null;
-      previewTab.style.maxWidth = '';
-      previewTab.style.minWidth = '';
-    };
-
-    hoverPreviewAnimation.addEventListener('finish', onFinish);
-    hoverPreviewAnimation.addEventListener('cancel', onFinish);
-  };
-
-  const collapseAndRemoveHoverAttachPreview = () => {
-    if (!hoverAttachPreviewTab) {
-      return;
-    }
-
-    const previewTab = hoverAttachPreviewTab;
-    hoverAttachPreviewTab = null;
-    hoverAttachPreviewTabList = null;
-    hoverPreviewExpanding = false;
-    cancelHoverPreviewAnimation();
-    removeCollapsingPreview();
-
-    previewTab.className = dragHoverPreviewClassName;
-
-    const currentWidth = toFiniteNumber(previewTab.getBoundingClientRect?.().width, 0);
-    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-
-    if (currentWidth <= 0 || typeof previewTab.animate !== 'function') {
-      previewTab.remove();
-      return;
-    }
-
-    collapsingPreviewElement = previewTab;
-
-    const animation = previewTab.animate(
-      [{ maxWidth: `${currentWidth}px` }, { maxWidth: '0px' }],
-      { duration: durationMs, easing: 'ease', fill: 'forwards' }
-    );
-
-    const onDone = () => {
-      if (collapsingPreviewElement === previewTab) {
-        collapsingPreviewElement = null;
-      }
-      previewTab.remove();
-    };
-    animation.addEventListener('finish', onDone);
-    animation.addEventListener('cancel', onDone);
-  };
-
-  const enableDragVisualResizeTransition = (session) => {
-    if (dragVisualResizeTransitionEnabled || !session) {
-      return;
-    }
-
-    const transitionDurationMs = scaleDurationMs(dragResizeTransitionDurationMs);
-    const proxyTransition = [
-      `width ${transitionDurationMs}ms ease`,
-      `min-width ${transitionDurationMs}ms ease`,
-      `max-width ${transitionDurationMs}ms ease`
-    ].join(', ');
-    const tabTransition = [
-      `flex-basis ${transitionDurationMs}ms ease`,
-      `min-width ${transitionDurationMs}ms ease`,
-      `max-width ${transitionDurationMs}ms ease`
-    ].join(', ');
-
-    if (session.dragProxy) {
-      session.dragProxy.style.transition = proxyTransition;
-    }
-    session.draggedTab.style.transition = tabTransition;
-    dragVisualResizeTransitionEnabled = true;
-  };
-
-  const applyDragVisualWidth = (session, widthPx) => {
-    const resolvedWidthPx = toFiniteNumber(widthPx, 0);
-    if (!session || resolvedWidthPx <= 0) {
-      return;
-    }
-
-    enableDragVisualResizeTransition(session);
-
-    if (session.dragProxy) {
-      session.dragProxy.style.width = `${resolvedWidthPx}px`;
-      session.dragProxy.style.minWidth = `${resolvedWidthPx}px`;
-      session.dragProxy.style.maxWidth = `${resolvedWidthPx}px`;
-    }
-
-    session.draggedTab.style.flex = `0 1 ${resolvedWidthPx}px`;
-    session.draggedTab.style.flexBasis = `${resolvedWidthPx}px`;
-    session.draggedTab.style.minWidth = `${resolvedWidthPx}px`;
-    session.draggedTab.style.maxWidth = `${resolvedWidthPx}px`;
-  };
-
-  const resetDragVisualWidth = (session) => {
-    if (!session?.dragProxy) {
-      return;
-    }
-
-    const baseWidthPx = resolveHoverPreviewWidthPx({
-      dragProxyBaseRect: session.dragProxyBaseRect,
-      draggedTab: session.draggedTab
-    });
-    if (baseWidthPx <= 0) {
-      return;
-    }
-
-    session.dragProxy.style.width = `${baseWidthPx}px`;
-    session.dragProxy.style.minWidth = `${baseWidthPx}px`;
-    session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
-  };
-
-  const syncDragVisualWidthWithHoverPreview = (session) => {
-    if (!hoverAttachPreviewTab || !session || hoverPreviewExpanding || typeof hoverAttachPreviewTab.getBoundingClientRect !== 'function') {
-      return;
-    }
-
-    const previewWidthPx = toFiniteNumber(hoverAttachPreviewTab.getBoundingClientRect().width, 0);
-    if (previewWidthPx <= 0) {
-      return;
-    }
-
-    applyDragVisualWidth(session, previewWidthPx);
-  };
-
-  const setFlexWidth = (el, widthPx) => {
-    el.style.flex = `0 0 ${widthPx}px`;
-    el.style.minWidth = `${widthPx}px`;
-    el.style.maxWidth = `${widthPx}px`;
-  };
-
-  const removeDetachPlaceholder = () => {
-    if (!detachPlaceholder) {
-      return;
-    }
-    detachPlaceholder.remove();
-    detachPlaceholder = null;
-    detachPlaceholderCollapsed = false;
-  };
-
-  const ensurePlaceholder = (tabList, draggedTab, widthPx) => {
-    if (detachPlaceholder) {
-      return;
-    }
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const el = document.createElement('div');
-    el.setAttribute('aria-hidden', 'true');
-    el.style.overflow = 'hidden';
-    el.style.height = '0';
-    setFlexWidth(el, widthPx);
-    draggedTab.style.display = 'none';
-    tabList.insertBefore(el, draggedTab);
-    detachPlaceholder = el;
-  };
-
-  const syncDetachPlaceholder = (shouldCollapse) => {
-    const { draggedTab, currentTabList, lockedTabWidthPx } = dragState;
-    if (shouldCollapse) {
-      ensurePlaceholder(currentTabList, draggedTab, lockedTabWidthPx);
-      if (detachPlaceholder && !detachPlaceholderCollapsed) {
-        detachPlaceholderCollapsed = true;
-        detachPlaceholder.getBoundingClientRect();
-        const durationMs = scaleDurationMs(detachCollapseDurationMs);
-        const ease = `${durationMs}ms ease`;
-        detachPlaceholder.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}`;
-        setFlexWidth(detachPlaceholder, 0);
-      }
-    } else if (detachPlaceholder && detachPlaceholderCollapsed) {
-      detachPlaceholderCollapsed = false;
-      setFlexWidth(detachPlaceholder, lockedTabWidthPx);
-    }
   };
 
   const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
@@ -570,28 +218,8 @@ export const initializeTabDrag = ({
     };
   };
 
-  const commitDropIntoHoverPreview = ({ draggedTab, attachTargetTabList }) => {
-    if (!hoverAttachPreviewTab || hoverAttachPreviewTabList !== attachTargetTabList) {
-      return false;
-    }
-
-    if (!attachTargetTabList || typeof attachTargetTabList.insertBefore !== 'function') {
-      clearHoverAttachPreview();
-      return false;
-    }
-
-    if (hoverAttachPreviewTab.parentNode !== attachTargetTabList) {
-      clearHoverAttachPreview();
-      return false;
-    }
-
-    attachTargetTabList.insertBefore(draggedTab, hoverAttachPreviewTab);
-    clearHoverAttachPreview();
-    return true;
-  };
-
   const commitDropAttach = ({ draggedTab, attachTargetTabList, pointerClientX }) => {
-    const didCommitPreviewDrop = commitDropIntoHoverPreview({
+    const didCommitPreviewDrop = hoverPreview.commitDrop({
       draggedTab,
       attachTargetTabList
     });
@@ -616,14 +244,11 @@ export const initializeTabDrag = ({
     dragState = null;
     hasQueuedPointer = false;
     sourceWindowRemovedDuringDetach = false;
-    dragVisualResizeTransitionEnabled = false;
-    hoverPreviewExpanding = false;
-    cancelHoverPreviewAnimation();
+    visualWidth.resetEnabled();
+    hoverPreview.expanding = false;
+    hoverPreview.cancelAnimation();
     clearGlobalListeners();
-    if (detachPlaceholder) {
-      completedState.draggedTab.style.display = '';
-      removeDetachPlaceholder();
-    }
+    placeholderManager.restoreDisplay(completedState.draggedTab);
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = completedState.initialUserSelect;
@@ -639,8 +264,8 @@ export const initializeTabDrag = ({
     }
 
     if (!completedState.dragStarted) {
-      clearHoverAttachPreview();
-      resetDragVisualWidth(completedState);
+      hoverPreview.clear();
+      visualWidth.reset(completedState);
       return;
     }
 
@@ -725,8 +350,8 @@ export const initializeTabDrag = ({
         }
         animateDetachedWindowFromTab({ panel: detachedWindow.panel, tabRect: sourceTabRect, frame: detachedWindow.frame });
         activateInSource?.();
-        clearHoverAttachPreview();
-        resetDragVisualWidth(completedState);
+        hoverPreview.clear();
+        visualWidth.reset(completedState);
         cleanupVisualState();
 
         if (completedState.dragMoved) {
@@ -737,9 +362,9 @@ export const initializeTabDrag = ({
       }
     }
 
-    clearHoverAttachPreview();
+    hoverPreview.clear();
     if (dropDestination !== 'attach') {
-      resetDragVisualWidth(completedState);
+      visualWidth.reset(completedState);
     }
     settleVisualState();
 
@@ -785,7 +410,7 @@ export const initializeTabDrag = ({
           clientX,
           clientY
         });
-        syncDetachPlaceholder(!insideHeader);
+        placeholderManager.sync(!insideHeader, dragState);
       }
     }
 
@@ -835,30 +460,29 @@ export const initializeTabDrag = ({
     }
 
     if (!attachTarget) {
-      collapseAndRemoveHoverAttachPreview();
-      resetDragVisualWidth(dragState);
+      hoverPreview.collapseAndRemove();
+      visualWidth.reset(dragState);
       return false;
     }
 
     let isFirstInsertion = false;
-    if (!hoverAttachPreviewTab || hoverAttachPreviewTabList !== attachTarget) {
-      clearHoverAttachPreview();
-      hoverAttachPreviewTab = createHoverAttachPreviewTab();
-      hoverAttachPreviewTabList = attachTarget;
+    if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
+      hoverPreview.clear();
+      hoverPreview.setPreview(hoverPreview.create(), attachTarget);
       isFirstInsertion = true;
     }
 
-    if (hoverAttachPreviewTab && (isFirstInsertion || !hoverPreviewExpanding)) {
+    if (hoverPreview.previewTab && (isFirstInsertion || !hoverPreview.expanding)) {
       moveTabWithLayoutPipeline({
         tabList: attachTarget,
-        draggedTab: hoverAttachPreviewTab,
+        draggedTab: hoverPreview.previewTab,
         pointerClientX: clientX
       });
 
       if (isFirstInsertion) {
-        expandHoverAttachPreview(dragState);
+        hoverPreview.expand(dragState);
       } else {
-        syncDragVisualWidthWithHoverPreview(dragState);
+        visualWidth.syncWithHoverPreview(dragState, hoverPreview);
       }
     }
 
@@ -1013,7 +637,7 @@ export const initializeTabDrag = ({
     queuedClientY = event.clientY;
     hasQueuedPointer = true;
     sourceWindowRemovedDuringDetach = false;
-    dragVisualResizeTransitionEnabled = false;
+    visualWidth.resetEnabled();
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);

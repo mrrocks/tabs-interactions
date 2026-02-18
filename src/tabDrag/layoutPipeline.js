@@ -1,14 +1,5 @@
-const toFiniteNumber = (value, fallbackValue = 0) => {
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
-};
-
-const toRectSnapshot = (rect) => ({
-  left: toFiniteNumber(rect.left, 0),
-  top: toFiniteNumber(rect.top, 0),
-  width: toFiniteNumber(rect.width, 0),
-  height: toFiniteNumber(rect.height, 0)
-});
+import { toFiniteNumber } from '../shared/math';
+import { toRectSnapshot } from '../shared/dom';
 
 const getSiblingTabs = (getTabs, tabList, draggedTab) => getTabs(tabList).filter((tab) => tab !== draggedTab);
 

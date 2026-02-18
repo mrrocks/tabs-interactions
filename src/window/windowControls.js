@@ -1,10 +1,9 @@
+import { isEventTargetElement } from '../shared/dom';
+
 export const closeWindowControlSelector = '[data-window-control="close"]';
 export const windowControlsSelector = '.window--controls';
 const windowPanelSelector = '.browser';
 const initializedRoots = new WeakSet();
-
-const isEventTargetElement = (target) =>
-  Boolean(target) && typeof target === 'object' && typeof target.closest === 'function';
 
 export const removePanel = (panel) => {
   if (!panel) {

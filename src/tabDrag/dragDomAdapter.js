@@ -1,4 +1,5 @@
-import { getOverlayZIndex } from '../windowFocus';
+import { toRectSnapshot } from '../shared/dom';
+import { getOverlayZIndex } from '../window/windowFocus';
 
 export const createDragDomAdapter = ({
   activeTabClassName,
@@ -8,13 +9,6 @@ export const createDragDomAdapter = ({
   dragSourceClassName,
   dragProxyClassName
 }) => {
-  const toRectSnapshot = (rect) => ({
-    left: rect.left,
-    top: rect.top,
-    width: rect.width,
-    height: rect.height
-  });
-
   const setElementTransform = (element, translateX, translateY) => {
     if (!element || !element.style) {
       return;

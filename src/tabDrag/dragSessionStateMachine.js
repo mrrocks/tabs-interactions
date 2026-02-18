@@ -1,13 +1,10 @@
+import { toFiniteNumber } from '../shared/math';
+
 export const dragSessionPhase = Object.freeze({
   pressed: 'pressed',
   attachedDrag: 'attachedDrag',
   settling: 'settling'
 });
-
-const toFiniteNumber = (value, fallbackValue = 0) => {
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
-};
 
 export const createDragSession = ({
   pointerId,

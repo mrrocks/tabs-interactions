@@ -1,3 +1,4 @@
+import { isEventTargetElement } from '../shared/dom';
 import {
   activeTabClassName,
   getArrowTargetIndex,
@@ -14,9 +15,6 @@ const closeButtonSelector = '.tab--close';
 const initializedTabLists = new WeakSet();
 
 export const getTabs = (tabList) => Array.from(tabList.querySelectorAll(tabSelector));
-
-const isEventTargetElement = (target) =>
-  Boolean(target) && typeof target === 'object' && typeof target.closest === 'function';
 
 export const getActiveTabIndex = (tabList) =>
   getTabs(tabList).findIndex((tab) => tab.classList.contains(activeTabClassName));

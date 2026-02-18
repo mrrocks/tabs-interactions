@@ -1,4 +1,6 @@
-export const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum);
+import { clamp } from '../shared/math';
+
+export { clamp };
 
 export const clampFrameToViewport = ({
   width,

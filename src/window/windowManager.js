@@ -1,17 +1,11 @@
-import { scaleDurationMs } from './motionSpeed';
-import { createWindowControlsElement, windowControlsSelector } from './windowControls';
+import { clamp, toFiniteNumber } from '../shared/math';
+import { scaleDurationMs } from '../motion/motionSpeed';
+import { createWindowControlsElement, removePanel, windowControlsSelector } from './windowControls';
 import { bringToFront } from './windowFocus';
 
 const defaultDetachAnchorX = 180;
 const defaultDetachAnchorY = 20;
 const detachedWindowEnterDurationMs = 180;
-
-const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum);
-
-const toFiniteNumber = (value, fallbackValue = 0) => {
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
-};
 
 const resolveViewportSize = (viewportWidth, viewportHeight) => {
   const hasWindow = typeof window !== 'undefined';
@@ -159,13 +153,7 @@ export const removeDetachedWindowIfEmpty = (panel) => {
     return false;
   }
 
-  if (typeof panel.remove === 'function') {
-    panel.remove();
-  } else if (panel.parentNode && typeof panel.parentNode.removeChild === 'function') {
-    panel.parentNode.removeChild(panel);
-  }
-
-  return true;
+  return removePanel(panel);
 };
 
 export const createDetachedWindow = ({

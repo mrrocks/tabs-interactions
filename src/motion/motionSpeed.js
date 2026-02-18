@@ -1,3 +1,5 @@
+import { clamp } from '../shared/math';
+
 export const motionSlowdownCssVariableName = '--motion-slowdown-factor';
 export const defaultMotionSlowdownFactor = 1;
 
@@ -9,8 +11,6 @@ export const motionSlowdownRange = Object.freeze({
 
 const motionSliderSelector = '[data-motion-slider]';
 const motionValueSelector = '[data-motion-value]';
-
-const clamp = (value, minimum, maximum) => Math.min(Math.max(value, minimum), maximum);
 
 const toFiniteNumber = (value) => {
   const parsedValue = Number.parseFloat(String(value).trim());

@@ -1,10 +1,10 @@
 import './styles.sass';
-import { initializeMotionSlowdownControl } from './motionSpeed';
-import { initializePanelInteraction, initializePanelInteractions } from './panelInteraction';
-import { initializeTabDrag } from './tabDrag';
-import { initializeTabList, initializeTabs } from './tabs';
-import { initializeWindowControls } from './windowControls';
-import { initializeWindowFocus } from './windowFocus';
+import { initializeMotionSlowdownControl } from './motion/motionSpeed';
+import { initializePanelInteraction, initializePanelInteractions } from './panel/panelInteraction';
+import { initializeTabDrag } from './tabDrag/tabDrag';
+import { initializeTabList, initializeTabs } from './tabs/tabs';
+import { initializeWindowControls } from './window/windowControls';
+import { initializeWindowFocus } from './window/windowFocus';
 
 initializeMotionSlowdownControl();
 initializeWindowFocus();
