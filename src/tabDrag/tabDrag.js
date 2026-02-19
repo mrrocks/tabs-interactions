@@ -257,7 +257,6 @@ export const initializeTabDrag = ({
     sourceWindowRemovedDuringDetach = false;
     visualWidth.cancelAll();
     clearGlobalListeners();
-    placeholderManager.restoreDisplay(completedState.draggedTab);
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = completedState.initialUserSelect;
@@ -351,10 +350,9 @@ export const initializeTabDrag = ({
       }
       activateInSource?.();
     } else if (dropDestination === 'detach' && sourceTabList && sourcePanel) {
-      const proxyElement = completedState.dragProxy;
-      const tabScreenRect = proxyElement
-        ? dragDomAdapter.toRectSnapshot(proxyElement.getBoundingClientRect())
-        : dragDomAdapter.toRectSnapshot(completedState.draggedTab.getBoundingClientRect());
+      const tabScreenRect = dragDomAdapter.toRectSnapshot(
+        (completedState.dragProxy ?? completedState.draggedTab).getBoundingClientRect()
+      );
       const activateInSource = captureSourceActivation(completedState.draggedTab, sourceTabList);
       const detachedWindow = createDetachedWindow({
         sourcePanel,
@@ -366,19 +364,17 @@ export const initializeTabDrag = ({
       if (detachedWindow) {
         initializePanelInteraction(detachedWindow.panel);
         initializeTabList(detachedWindow.tabList);
-        if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
-          removePanel(sourcePanel);
-        }
         animateDetachedWindowFromTab({
-          panel: detachedWindow.panel,
+          ...detachedWindow,
           draggedTab: completedState.draggedTab,
-          tabList: detachedWindow.tabList,
-          tabOffsetInPanel: detachedWindow.tabOffsetInPanel,
           tabScreenRect,
-          frame: detachedWindow.frame,
           onComplete: () => {
+            placeholderManager.restoreDisplay(completedState.draggedTab);
             setActiveTab(detachedWindow.tabList, 0);
             cleanupVisualState();
+            if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
+              removePanel(sourcePanel);
+            }
           }
         });
         activateInSource?.();
@@ -393,6 +389,7 @@ export const initializeTabDrag = ({
       }
     }
 
+    placeholderManager.restoreDisplay(completedState.draggedTab);
     hoverPreview.clear();
     if (dropDestination !== 'attach') {
       visualWidth.reset(completedState);

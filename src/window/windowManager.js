@@ -30,8 +30,11 @@ const getDetachedWindowEnterDurationMs = () => scaleDurationMs(detachedWindowEnt
 
 const initialDetachScale = 0.6;
 
-export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, tabOffsetInPanel, tabScreenRect, frame, onComplete }) => {
+export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onComplete }) => {
   const finalize = () => {
+    if (placeholder && typeof placeholder.remove === 'function') {
+      placeholder.remove();
+    }
     moveTabToList({ tab: draggedTab, tabList });
     if (typeof onComplete === 'function') {
       onComplete();
@@ -113,6 +116,17 @@ const createDetachedPanelElements = ({ sourcePanel, sourceTabList }) => {
 
 const getTabEndReference = (tabList) => tabList.querySelector('.tab--add') ?? null;
 
+const createTabPlaceholder = (tabList, { width, height }) => {
+  const el = document.createElement('div');
+  el.style.flex = `0 0 ${width}px`;
+  el.style.minWidth = `${width}px`;
+  el.style.maxWidth = `${width}px`;
+  el.style.height = `${height}px`;
+  el.setAttribute('aria-hidden', 'true');
+  tabList.insertBefore(el, getTabEndReference(tabList));
+  return el;
+};
+
 export const moveTabToList = ({ tab, tabList, beforeNode = getTabEndReference(tabList) }) => {
   tabList.insertBefore(tab, beforeNode);
 };
@@ -154,22 +168,14 @@ export const createDetachedWindow = ({
   mountTarget.append(panel);
 
   const draggedRect = draggedTab.getBoundingClientRect();
-  const probe = document.createElement('div');
-  probe.style.flex = `0 0 ${draggedRect.width}px`;
-  probe.style.minWidth = `${draggedRect.width}px`;
-  probe.style.maxWidth = `${draggedRect.width}px`;
-  probe.style.height = `${draggedRect.height}px`;
-  probe.setAttribute('aria-hidden', 'true');
-  tabList.insertBefore(probe, getTabEndReference(tabList));
+  const placeholder = createTabPlaceholder(tabList, draggedRect);
 
   const panelRect = panel.getBoundingClientRect();
-  const probeRect = probe.getBoundingClientRect();
+  const placeholderRect = placeholder.getBoundingClientRect();
   const tabOffsetInPanel = {
-    x: probeRect.left - panelRect.left,
-    y: probeRect.top - panelRect.top
+    x: placeholderRect.left - panelRect.left,
+    y: placeholderRect.top - panelRect.top
   };
-
-  probe.remove();
 
   const frame = computeFrameFromTabAnchor({
     tabScreenRect,
@@ -186,6 +192,7 @@ export const createDetachedWindow = ({
     panel,
     tabList,
     frame,
-    tabOffsetInPanel
+    tabOffsetInPanel,
+    placeholder
   };
 };
