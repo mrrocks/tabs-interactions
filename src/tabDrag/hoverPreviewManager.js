@@ -36,6 +36,7 @@ export const createHoverPreviewManager = ({
     tab.style.pointerEvents = 'none';
     tab.style.overflow = 'hidden';
     tab.style.transition = 'none';
+    tab.style.padding = '0';
     tab.style.flex = '0 1 var(--tab-default-width)';
     tab.style.minWidth = '0';
     tab.style.maxWidth = '0';

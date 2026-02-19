@@ -154,7 +154,8 @@ export const initializeTabDrag = ({
   });
   const visualWidth = createDragVisualWidthManager({
     scaleDurationMs,
-    hoverPreviewExpandDurationMs
+    hoverPreviewExpandDurationMs,
+    tabItemClassName: tabSelector.slice(1)
   });
 
   let dragState = null;
@@ -461,7 +462,9 @@ export const initializeTabDrag = ({
     }
 
     if (!attachTarget) {
-      visualWidth.animateOut(hoverPreview.previewTab);
+      visualWidth.animateOut(hoverPreview.previewTab, (displacements) => {
+        animationCoordinator.animateSiblingDisplacement(displacements);
+      });
       hoverPreview.setPreview(null, null);
       visualWidth.reset(dragState);
       return false;

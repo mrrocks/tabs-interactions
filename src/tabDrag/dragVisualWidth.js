@@ -3,7 +3,7 @@ import { resolveHoverPreviewWidthPx } from './dragCalculations';
 
 const ANIMATION_META_PROPS = new Set(['offset', 'easing', 'composite', 'computedOffset']);
 
-export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpandDurationMs }) => {
+export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpandDurationMs, tabItemClassName }) => {
   let activeAnimations = [];
   let animatingIn = false;
   let committedWidthPx = 0;
@@ -93,9 +93,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     ], animOptions);
 
     if (previewAnim) {
-      const onDone = () => { animatingIn = false; };
-      previewAnim.addEventListener('finish', onDone);
-      previewAnim.addEventListener('cancel', onDone);
+      previewAnim.addEventListener('finish', () => { animatingIn = false; });
     } else {
       animatingIn = false;
     }
@@ -103,11 +101,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     animateProxyAndTab(session, settledWidthPx, animOptions);
   };
 
-  const animateOut = (previewTab) => {
+  const animateOut = (previewTab, onRemoved) => {
     if (!previewTab) {
       return;
     }
 
+    const tabList = previewTab.parentNode;
     const currentWidth = toFiniteNumber(previewTab.getBoundingClientRect?.().width, 0);
 
     cancelAll();
@@ -130,7 +129,22 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       { duration: durationMs, easing: 'ease', fill: 'forwards' }
     );
 
-    const onDone = () => previewTab.remove();
+    const onDone = () => {
+      const siblings = tabList
+        ? Array.from(tabList.children).filter((el) => el !== previewTab && el.classList?.contains(tabItemClassName))
+        : [];
+      const beforeLeftMap = new Map(siblings.map((s) => [s, s.getBoundingClientRect().left]));
+
+      previewTab.remove();
+
+      const displacements = siblings
+        .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
+        .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
+
+      if (typeof onRemoved === 'function') {
+        onRemoved(displacements);
+      }
+    };
     anim.addEventListener('finish', onDone);
     anim.addEventListener('cancel', onDone);
   };
