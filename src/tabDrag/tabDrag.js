@@ -386,11 +386,14 @@ export const initializeTabDrag = ({
             tab.style.willChange = '';
             tab.style.zIndex = '';
             tab.style.visibility = 'hidden';
-            if (proxy && proxy.classList.contains(inactiveDragClassName)) {
-              proxy.classList.remove(dragClassName);
-              proxy.getBoundingClientRect();
-              proxy.classList.remove(inactiveDragClassName);
-              proxy.classList.add(activeDragClassName);
+            if (proxy) {
+              const wasInactive = proxy.classList.contains(inactiveDragClassName);
+              if (wasInactive) {
+                proxy.classList.remove(dragClassName);
+                proxy.getBoundingClientRect();
+                proxy.classList.remove(inactiveDragClassName);
+                proxy.classList.add(activeDragClassName);
+              }
               const durationMs = scaleDurationMs(cornerClipDurationMs);
               animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
               animateShapeRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
