@@ -38,7 +38,7 @@ import {
 import { createHoverPreviewManager } from './hoverPreviewManager';
 import { createDetachPlaceholderManager } from './detachPlaceholder';
 import { createDragVisualWidthManager } from './dragVisualWidth';
-import { animateCornerClipIn, animateCornerClipOut, animateShapeRadiusToDetached } from './cornerClipAnimation';
+import { animateCornerClipIn, animateCornerClipOut, animateShapeRadiusToAttached, animateShapeRadiusToDetached } from './cornerClipAnimation';
 
 export {
   dragActivationDistancePx,
@@ -270,9 +270,9 @@ export const initializeTabDrag = ({
     const cleanupVisualState = () => {
       dragDomAdapter.cleanupVisualState(completedState);
       if (completedState.draggedTab.classList.contains(activeTabClassName)) {
-        animateCornerClipIn(completedState.draggedTab, {
-          durationMs: scaleDurationMs(cornerClipDurationMs)
-        });
+        const durationMs = scaleDurationMs(cornerClipDurationMs);
+        animateCornerClipIn(completedState.draggedTab, { durationMs });
+        animateShapeRadiusToAttached(completedState.draggedTab, { durationMs });
       }
     };
 
