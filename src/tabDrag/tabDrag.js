@@ -362,7 +362,8 @@ export const initializeTabDrag = ({
       const detachedWindow = createDetachedWindow({
         sourcePanel,
         sourceTabList,
-        tabScreenRect
+        tabScreenRect,
+        sourcePanelRect: completedState.sourcePanelRect
       });
 
       if (detachedWindow) {
@@ -479,8 +480,11 @@ export const initializeTabDrag = ({
             ? dragState.currentTabList.closest('.browser')
             : null;
 
-        if (sourcePanel && removePanel(sourcePanel)) {
-          sourceWindowRemovedDuringDetach = true;
+        if (sourcePanel) {
+          dragState.sourcePanelRect = dragDomAdapter.toRectSnapshot(sourcePanel.getBoundingClientRect());
+          if (removePanel(sourcePanel)) {
+            sourceWindowRemovedDuringDetach = true;
+          }
         }
       }
 

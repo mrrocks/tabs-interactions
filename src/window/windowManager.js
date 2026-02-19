@@ -152,13 +152,15 @@ export const removeDetachedWindowIfEmpty = (panel) => {
 export const createDetachedWindow = ({
   sourcePanel,
   sourceTabList,
-  tabScreenRect
+  tabScreenRect,
+  sourcePanelRect
 }) => {
   if (typeof document === 'undefined') {
     return null;
   }
 
-  const sourceRect = sourcePanel.getBoundingClientRect();
+  const liveRect = sourcePanel.getBoundingClientRect();
+  const sourceRect = liveRect.width > 0 && liveRect.height > 0 ? liveRect : sourcePanelRect ?? liveRect;
   const { panel, tabList } = createDetachedPanelElements({ sourcePanel, sourceTabList });
   const panelWidth = sourceRect.width;
   const panelHeight = sourceRect.height;
