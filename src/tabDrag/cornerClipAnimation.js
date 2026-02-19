@@ -1,3 +1,5 @@
+import { dragTransitionEasing } from './dragAnimationConfig';
+
 const CORNER_WIDTH_PX = 12;
 const TRANSLATE_HIDDEN_BEFORE = `translateX(${CORNER_WIDTH_PX}px)`;
 const TRANSLATE_HIDDEN_AFTER = `translateX(-${CORNER_WIDTH_PX}px)`;
@@ -22,7 +24,7 @@ const animatePseudo = (shape, pseudo, keyframes, options) => {
   }
 };
 
-export const animateCornerClipIn = (tab, { durationMs, easing = 'ease', fill = 'none' } = {}) => {
+export const animateCornerClipIn = (tab, { durationMs, easing = dragTransitionEasing, fill = 'none' } = {}) => {
   const shape = resolveShape(tab);
   if (!shape) {
     return [];
@@ -35,7 +37,7 @@ export const animateCornerClipIn = (tab, { durationMs, easing = 'ease', fill = '
   ].filter(Boolean);
 };
 
-export const animateCornerClipOut = (tab, { durationMs, easing = 'ease' } = {}) => {
+export const animateCornerClipOut = (tab, { durationMs, easing = dragTransitionEasing } = {}) => {
   const shape = resolveShape(tab);
   if (!shape) {
     return [];
@@ -48,7 +50,7 @@ export const animateCornerClipOut = (tab, { durationMs, easing = 'ease' } = {}) 
   ].filter(Boolean);
 };
 
-const animateShapeRadius = (tab, from, to, { durationMs, easing = 'ease', fill = 'none' } = {}) => {
+const animateShapeRadius = (tab, from, to, { durationMs, easing = dragTransitionEasing, fill = 'none' } = {}) => {
   const shape = resolveShape(tab);
   if (!shape) {
     return null;

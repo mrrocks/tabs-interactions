@@ -1,3 +1,5 @@
+import { dragTransitionEasing } from './dragAnimationConfig';
+
 export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapseDurationMs }) => {
   let placeholder = null;
   let collapsed = false;
@@ -43,7 +45,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
         collapsed = true;
         placeholder.getBoundingClientRect();
         const durationMs = scaleDurationMs(detachCollapseDurationMs);
-        const ease = `${durationMs}ms ease`;
+        const ease = `${durationMs}ms ${dragTransitionEasing}`;
         placeholder.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}`;
         setFlexWidth(placeholder, 0);
       }

@@ -1,8 +1,10 @@
+import { dragTransitionDurationMs, dragTransitionEasing } from './dragAnimationConfig';
+
 export const createAnimationCoordinator = ({
   scaleDurationMs,
   getProxySettleDelta,
-  dragProxySettleDurationMs = 150,
-  siblingDisplacementDurationMs = 150
+  dragProxySettleDurationMs = dragTransitionDurationMs,
+  siblingDisplacementDurationMs = dragTransitionDurationMs
 }) => {
   const animateSiblingDisplacement = (displacements) => {
     const duration = scaleDurationMs(siblingDisplacementDurationMs);
@@ -16,7 +18,7 @@ export const createAnimationCoordinator = ({
         [{ transform: `translate3d(${deltaX}px, 0px, 0px)` }, { transform: 'translate3d(0px, 0px, 0px)' }],
         {
           duration,
-          easing: 'ease'
+          easing: dragTransitionEasing
         }
       );
     });
@@ -59,7 +61,7 @@ export const createAnimationCoordinator = ({
       ],
       {
         duration: scaleDurationMs(dragProxySettleDurationMs),
-        easing: 'ease',
+        easing: dragTransitionEasing,
         fill: 'forwards'
       }
     );

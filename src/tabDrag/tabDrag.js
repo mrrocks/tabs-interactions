@@ -46,6 +46,8 @@ import {
   animateShapeRadiusToDetached
 } from './cornerClipAnimation';
 import { animateDragShadowIn, animateDragShadowOut } from './dragShadowAnimation';
+import { createDetachTransitionManager } from './detachTransition';
+import { dragTransitionDurationMs, dragShadowOutDurationMs } from './dragAnimationConfig';
 
 export {
   dragActivationDistancePx,
@@ -69,12 +71,6 @@ export {
   shouldRemoveSourceWindowOnDetach
 } from './dragCalculations';
 
-const dragProxySettleDurationMs = 150;
-const detachCollapseDurationMs = 150;
-const hoverPreviewExpandDurationMs = 150;
-const cornerClipDurationMs = 150;
-const dragShadowInDurationMs = 150;
-const dragShadowOutDurationMs = 100;
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -145,7 +141,7 @@ export const initializeTabDrag = ({
   const animationCoordinator = createAnimationCoordinator({
     scaleDurationMs,
     getProxySettleDelta,
-    dragProxySettleDurationMs
+    dragProxySettleDurationMs: dragTransitionDurationMs
   });
   const layoutPipeline = createLayoutPipeline({
     getTabs,
@@ -163,12 +159,16 @@ export const initializeTabDrag = ({
   });
   const placeholderManager = createDetachPlaceholderManager({
     scaleDurationMs,
-    detachCollapseDurationMs
+    detachCollapseDurationMs: dragTransitionDurationMs
   });
   const visualWidth = createDragVisualWidthManager({
     scaleDurationMs,
-    hoverPreviewExpandDurationMs,
+    hoverPreviewExpandDurationMs: dragTransitionDurationMs,
     tabItemClassName: tabSelector.slice(1)
+  });
+  const detachTransition = createDetachTransitionManager({
+    scaleDurationMs,
+    transitionDurationMs: dragTransitionDurationMs
   });
 
   let dragState = null;
@@ -259,6 +259,7 @@ export const initializeTabDrag = ({
     hasQueuedPointer = false;
     sourceWindowRemovedDuringDetach = false;
     visualWidth.cancelAll();
+    detachTransition.reset();
     clearGlobalListeners();
 
     if (typeof document !== 'undefined' && document.body) {
@@ -283,7 +284,7 @@ export const initializeTabDrag = ({
     const cleanupVisualState = () => {
       dragDomAdapter.cleanupVisualState(completedState);
       if (completedState.draggedTab.classList.contains(activeTabClassName)) {
-        const durationMs = scaleDurationMs(cornerClipDurationMs);
+        const durationMs = scaleDurationMs(dragTransitionDurationMs);
         animateCornerClipIn(completedState.draggedTab, { durationMs });
         animateShapeRadiusToAttached(completedState.draggedTab, { durationMs });
       }
@@ -394,7 +395,7 @@ export const initializeTabDrag = ({
                 proxy.classList.remove(inactiveDragClassName);
                 proxy.classList.add(activeDragClassName);
               }
-              const durationMs = scaleDurationMs(cornerClipDurationMs);
+              const durationMs = scaleDurationMs(dragTransitionDurationMs);
               animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
               animateShapeRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
             }
@@ -445,6 +446,7 @@ export const initializeTabDrag = ({
 
     const deltaX = clientX - dragState.startX;
     const deltaY = clientY - dragState.startY;
+    const wasDetached = dragState.detachIntentActive;
 
     if (dragState.reattachArmed) {
       dragState.detachIntentActive = resolveDetachIntent({
@@ -453,6 +455,14 @@ export const initializeTabDrag = ({
       });
     } else if (Math.abs(deltaY) < detachThresholdPx * 0.5) {
       dragState.reattachArmed = true;
+    }
+
+    if (!wasDetached && dragState.detachIntentActive) {
+      detachTransition.activate(deltaY);
+      if (dragState.dragProxy) {
+        const panel = dragState.currentTabList?.closest?.('.browser');
+        visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
+      }
     }
 
     if (dragState.dragProxy) {
@@ -483,10 +493,10 @@ export const initializeTabDrag = ({
     const visualOffsetY = resolveDragVisualOffsetY({
       deltaY,
       detachIntentActive: dragState.detachIntentActive
-    });
+    }) + detachTransition.sample();
     dragDomAdapter.setDragVisualTransform(dragState, deltaX, visualOffsetY);
 
-    if (attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
+    if (!detachTransition.active && attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
       return;
     }
 
@@ -581,14 +591,14 @@ export const initializeTabDrag = ({
     dragDomAdapter.applyDragStyles(dragState);
 
     if (wasActive && dragState.dragProxy) {
-      const durationMs = scaleDurationMs(cornerClipDurationMs);
+      const durationMs = scaleDurationMs(dragTransitionDurationMs);
       animateCornerClipOut(dragState.dragProxy, { durationMs });
       animateShapeRadiusToDetached(dragState.dragProxy, { durationMs });
     }
 
     if (dragState.dragProxy) {
       animateDragShadowIn(dragState.dragProxy, {
-        durationMs: scaleDurationMs(dragShadowInDurationMs),
+        durationMs: scaleDurationMs(dragTransitionDurationMs),
         isActive: wasActive
       });
     }
@@ -600,12 +610,16 @@ export const initializeTabDrag = ({
   };
 
   const applyDragSample = () => {
-    if (!dragState || !hasQueuedPointer) {
+    if (!dragState) {
       return;
     }
 
-    const clientX = queuedClientX;
-    const clientY = queuedClientY;
+    if (!hasQueuedPointer && !detachTransition.active) {
+      return;
+    }
+
+    const clientX = hasQueuedPointer ? queuedClientX : dragState.lastClientX;
+    const clientY = hasQueuedPointer ? queuedClientY : dragState.lastClientY;
     dragState.lastClientX = clientX;
     dragState.lastClientY = clientY;
 
@@ -623,6 +637,9 @@ export const initializeTabDrag = ({
   const processDragFrame = () => {
     frameRequestId = 0;
     applyDragSample();
+    if (detachTransition.active) {
+      scheduleDragFrame();
+    }
   };
 
   const scheduleDragFrame = () => {

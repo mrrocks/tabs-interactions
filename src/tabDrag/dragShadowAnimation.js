@@ -1,3 +1,5 @@
+import { dragTransitionEasing } from './dragAnimationConfig';
+
 const SHADOW_NONE = '0 0 0 rgba(0, 0, 0, 0), 0 0 0 rgba(0, 0, 0, 0)';
 const SHADOW_DRAG = '0 4px 12px rgba(0, 0, 0, 0.06), 0 0px 2px rgba(0, 0, 0, 0.02)';
 const SHAPE_SELECTOR = '.tab--shape';
@@ -29,7 +31,7 @@ const animateShadow = (target, keyframes, options) => {
   }
 };
 
-export const animateDragShadowIn = (element, { durationMs, easing = 'ease', isActive } = {}) => {
+export const animateDragShadowIn = (element, { durationMs, easing = dragTransitionEasing, isActive } = {}) => {
   const resolved = resolveTarget(element, isActive);
   if (!resolved) {
     return null;
@@ -47,7 +49,7 @@ export const animateDragShadowIn = (element, { durationMs, easing = 'ease', isAc
   );
 };
 
-export const animateDragShadowOut = (element, { durationMs, easing = 'ease', isActive } = {}) => {
+export const animateDragShadowOut = (element, { durationMs, easing = dragTransitionEasing, isActive } = {}) => {
   const resolved = resolveTarget(element, isActive);
   if (!resolved) {
     return null;

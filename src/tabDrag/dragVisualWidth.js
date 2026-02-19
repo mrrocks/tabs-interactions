@@ -1,5 +1,6 @@
 import { toFiniteNumber } from '../shared/math';
 import { resolveHoverPreviewWidthPx } from './dragCalculations';
+import { dragTransitionEasing } from './dragAnimationConfig';
 
 const ANIMATION_META_PROPS = new Set(['offset', 'easing', 'composite', 'computedOffset']);
 
@@ -83,7 +84,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
     committedWidthPx = settledWidthPx;
     const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-    const animOptions = { duration: durationMs, easing: 'ease', fill: 'forwards' };
+    const animOptions = { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' };
 
     animatingIn = true;
 
@@ -126,7 +127,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
         { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
         { minWidth: '0px', maxWidth: '0px' }
       ],
-      { duration: durationMs, easing: 'ease', fill: 'forwards' }
+      { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' }
     );
 
     const onDone = () => {
@@ -171,7 +172,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     cancelAll();
 
     const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-    const animOptions = { duration: durationMs, easing: 'ease', fill: 'forwards' };
+    const animOptions = { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' };
 
     animateProxyAndTab(session, previewWidthPx, animOptions);
   };
@@ -208,7 +209,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     committedWidthPx = targetWidthPx;
 
     const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-    const animOptions = { duration: durationMs, easing: 'ease', fill: 'forwards' };
+    const animOptions = { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' };
     animateProxyAndTab(session, targetWidthPx, animOptions);
   };
 
