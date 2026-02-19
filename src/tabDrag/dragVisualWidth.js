@@ -8,6 +8,8 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
   let activeAnimations = [];
   let animatingIn = false;
   let committedWidthPx = 0;
+  let lastProxyTargetWidthPx = 0;
+  let lastTabTargetWidthPx = 0;
 
   const makeAnimOptions = () => ({
     duration: scaleDurationMs(hoverPreviewExpandDurationMs),
@@ -41,6 +43,8 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     activeAnimations = [];
     animatingIn = false;
     committedWidthPx = 0;
+    lastProxyTargetWidthPx = 0;
+    lastTabTargetWidthPx = 0;
   };
 
   const trackAnimation = (element, keyframes, options) => {
@@ -56,28 +60,47 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
   const animateProxyAndTab = (session, targetWidthPx, animOptions) => {
     if (session.dragProxy) {
-      const currentProxyWidth = toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, targetWidthPx);
+      const currentProxyWidth = lastProxyTargetWidthPx > 0
+        ? lastProxyTargetWidthPx
+        : toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, targetWidthPx);
       session.dragProxy.style.transition = 'none';
       trackAnimation(session.dragProxy, [
         { width: `${currentProxyWidth}px`, minWidth: `${currentProxyWidth}px`, maxWidth: `${currentProxyWidth}px` },
         { width: `${targetWidthPx}px`, minWidth: `${targetWidthPx}px`, maxWidth: `${targetWidthPx}px` }
       ], animOptions);
+      lastProxyTargetWidthPx = targetWidthPx;
     }
 
-    const currentTabWidth = toFiniteNumber(session.draggedTab.getBoundingClientRect?.().width, targetWidthPx);
+    const currentTabWidth = lastTabTargetWidthPx > 0
+      ? lastTabTargetWidthPx
+      : toFiniteNumber(session.draggedTab.getBoundingClientRect?.().width, targetWidthPx);
     session.draggedTab.style.transition = 'none';
     trackAnimation(session.draggedTab, [
       { flexBasis: `${currentTabWidth}px`, minWidth: `${currentTabWidth}px`, maxWidth: `${currentTabWidth}px` },
       { flexBasis: `${targetWidthPx}px`, minWidth: `${targetWidthPx}px`, maxWidth: `${targetWidthPx}px` }
     ], animOptions);
+    lastTabTargetWidthPx = targetWidthPx;
+  };
+
+  const getSiblings = (previewTab) => {
+    const tabList = previewTab.parentNode;
+    if (!tabList) {
+      return [];
+    }
+    return Array.from(tabList.children).filter(
+      (el) => el !== previewTab && el.classList?.contains(tabItemClassName)
+    );
   };
 
   const animateIn = (session, previewTab, { fromWidthPx = 0 } = {}) => {
     if (!previewTab || !session) {
-      return;
+      return { displacements: [] };
     }
 
     cancelAll();
+
+    const siblings = getSiblings(previewTab);
+    const beforeLeftMap = new Map(siblings.map((s) => [s, s.getBoundingClientRect().left]));
 
     previewTab.style.minWidth = '';
     previewTab.style.maxWidth = '';
@@ -85,13 +108,17 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
     const settledWidthPx = previewTab.getBoundingClientRect().width;
     if (settledWidthPx <= 0) {
-      return;
+      return { displacements: [] };
     }
 
     const startWidthPx = Math.min(toFiniteNumber(fromWidthPx, 0), settledWidthPx);
 
     previewTab.style.minWidth = `${startWidthPx}px`;
     previewTab.style.maxWidth = `${startWidthPx}px`;
+
+    const displacements = siblings
+      .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
+      .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
 
     committedWidthPx = settledWidthPx;
     const animOptions = makeAnimOptions();
@@ -110,6 +137,8 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     }
 
     animateProxyAndTab(session, settledWidthPx, animOptions);
+
+    return { displacements };
   };
 
   const animateOut = (previewTab, onRemoved) => {
@@ -118,7 +147,9 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     }
 
     const tabList = previewTab.parentNode;
-    const currentWidth = toFiniteNumber(previewTab.getBoundingClientRect?.().width, 0);
+    const currentWidth = committedWidthPx > 0
+      ? committedWidthPx
+      : toFiniteNumber(previewTab.getBoundingClientRect?.().width, 0);
 
     cancelAll();
 
@@ -205,7 +236,9 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       return;
     }
 
-    const currentWidth = toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, 0);
+    const currentWidth = lastProxyTargetWidthPx > 0
+      ? lastProxyTargetWidthPx
+      : toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, 0);
     if (currentWidth <= 0 || Math.abs(currentWidth - targetWidthPx) < 1) {
       return;
     }

@@ -625,7 +625,7 @@ export const initializeTabDrag = ({
         bringToFront(targetPanel);
       }
       const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
-      const placeholderWidthPx = replacingPlaceholder ? placeholderManager.currentWidthPx() : 0;
+      const placeholderWidthPx = replacingPlaceholder ? placeholderManager.targetWidthPx() : 0;
       hoverPreview.createAndAttach(attachTarget);
       if (replacingPlaceholder) {
         placeholderManager.replaceWith(hoverPreview.previewTab);
@@ -635,7 +635,10 @@ export const initializeTabDrag = ({
         draggedTab: hoverPreview.previewTab,
         pointerClientX: clientX
       });
-      visualWidth.animateIn(dragState, hoverPreview.previewTab, { fromWidthPx: placeholderWidthPx });
+      const { displacements } = visualWidth.animateIn(dragState, hoverPreview.previewTab, { fromWidthPx: placeholderWidthPx });
+      if (displacements.length > 0) {
+        animationCoordinator.animateSiblingDisplacement(displacements);
+      }
     } else if (!visualWidth.animatingIn) {
       moveTabWithLayoutPipeline({
         tabList: attachTarget,

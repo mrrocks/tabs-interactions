@@ -4,6 +4,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
   let placeholder = null;
   let collapsed = false;
   let hiddenTab = null;
+  let logicalWidthPx = 0;
 
   const setFlexWidth = (el, widthPx) => {
     el.style.flex = `0 0 ${widthPx}px`;
@@ -27,6 +28,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     placeholder.remove();
     placeholder = null;
     collapsed = false;
+    logicalWidthPx = 0;
   };
 
   const ensure = (tabList, draggedTab, widthPx) => {
@@ -38,6 +40,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     hiddenTab = draggedTab;
     tabList.insertBefore(el, draggedTab);
     placeholder = el;
+    logicalWidthPx = widthPx;
   };
 
   const ensureAt = (existingElement, { draggedTab }, widthPx) => {
@@ -50,6 +53,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     draggedTab.style.display = 'none';
     hiddenTab = draggedTab;
     placeholder = el;
+    logicalWidthPx = widthPx;
   };
 
   const replaceWith = (element) => {
@@ -60,6 +64,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     placeholder.replaceWith(element);
     placeholder = null;
     collapsed = false;
+    logicalWidthPx = 0;
   };
 
   const sync = (shouldCollapse, { draggedTab, currentTabList, lockedTabWidthPx }) => {
@@ -67,6 +72,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
       ensure(currentTabList, draggedTab, lockedTabWidthPx);
       if (placeholder && !collapsed) {
         collapsed = true;
+        logicalWidthPx = 0;
         placeholder.getBoundingClientRect();
         const durationMs = scaleDurationMs(detachCollapseDurationMs);
         const ease = `${durationMs}ms ${dragTransitionEasing}`;
@@ -75,6 +81,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
       }
     } else if (placeholder && collapsed) {
       collapsed = false;
+      logicalWidthPx = lockedTabWidthPx;
       setFlexWidth(placeholder, lockedTabWidthPx);
     }
   };
@@ -94,9 +101,12 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     remove();
   };
 
+  const targetWidthPx = () => placeholder ? logicalWidthPx : 0;
+
   return {
     get active() { return placeholder !== null; },
     currentWidthPx,
+    targetWidthPx,
     ensureAt,
     remove,
     replaceWith,
