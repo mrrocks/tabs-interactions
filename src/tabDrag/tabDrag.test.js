@@ -1,20 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyVerticalResistance,
+  applyResistance,
+  computeOvershoot,
   detachThresholdPx,
   getInsertionIndexFromCenters,
   getProxySettleDelta,
+  resistanceMaxPx,
+  resistanceOnsetInsetPx,
   resolveDetachIntent,
   resolveDropDetachIntent,
   resolveDropAttachTarget,
+  resolveDragVisualOffsetX,
   resolveDragVisualOffsetY,
   resolveHoverPreviewWidthPx,
   resolveSourceActivationIndexAfterDetach,
   shouldCloseSourcePanelAfterTransfer,
-  shouldDetachFromVerticalDelta,
+  shouldDetachFromOvershoot,
   shouldDetachOnDrop,
   shouldRemoveSourceWindowOnDetach,
-  verticalResistanceMaxPx,
   windowAttachPaddingPx
 } from './tabDrag';
 
@@ -26,19 +29,58 @@ describe('getInsertionIndexFromCenters', () => {
   });
 });
 
-describe('applyVerticalResistance', () => {
-  it('reduces vertical drag distance and clamps to max offset', () => {
-    expect(applyVerticalResistance(60)).toBeLessThan(60);
-    expect(applyVerticalResistance(10_000)).toBe(verticalResistanceMaxPx);
-    expect(applyVerticalResistance(-10_000)).toBe(-verticalResistanceMaxPx);
+describe('applyResistance', () => {
+  it('reduces drag distance and clamps to max offset', () => {
+    expect(applyResistance(60)).toBeLessThan(60);
+    expect(applyResistance(10_000)).toBe(resistanceMaxPx);
+    expect(applyResistance(-10_000)).toBe(-resistanceMaxPx);
+  });
+
+  it('returns zero for zero input', () => {
+    expect(applyResistance(0)).toBe(0);
   });
 });
 
-describe('shouldDetachFromVerticalDelta', () => {
-  it('detaches only when absolute vertical movement reaches threshold', () => {
-    expect(shouldDetachFromVerticalDelta(detachThresholdPx - 1)).toBe(false);
-    expect(shouldDetachFromVerticalDelta(detachThresholdPx)).toBe(true);
-    expect(shouldDetachFromVerticalDelta(-detachThresholdPx)).toBe(true);
+describe('computeOvershoot', () => {
+  it('returns zero when value is inside the inset boundary', () => {
+    expect(computeOvershoot({ value: 50, min: 0, max: 100, inset: 4 })).toBe(0);
+  });
+
+  it('returns negative overshoot past the left/top inset edge', () => {
+    expect(computeOvershoot({ value: 2, min: 0, max: 100, inset: 4 })).toBe(-2);
+  });
+
+  it('returns positive overshoot past the right/bottom inset edge', () => {
+    expect(computeOvershoot({ value: 98, min: 0, max: 100, inset: 4 })).toBe(2);
+  });
+
+  it('returns zero exactly at the inset boundary', () => {
+    expect(computeOvershoot({ value: 4, min: 0, max: 100, inset: 4 })).toBe(0);
+    expect(computeOvershoot({ value: 96, min: 0, max: 100, inset: 4 })).toBe(0);
+  });
+
+  it('uses resistanceOnsetInsetPx as default inset', () => {
+    expect(computeOvershoot({ value: 0, min: 0, max: 100 })).toBe(-resistanceOnsetInsetPx);
+  });
+});
+
+describe('shouldDetachFromOvershoot', () => {
+  it('detaches when X overshoot reaches threshold', () => {
+    expect(shouldDetachFromOvershoot(detachThresholdPx, 0)).toBe(true);
+    expect(shouldDetachFromOvershoot(-detachThresholdPx, 0)).toBe(true);
+  });
+
+  it('detaches when Y overshoot reaches threshold', () => {
+    expect(shouldDetachFromOvershoot(0, detachThresholdPx)).toBe(true);
+  });
+
+  it('does not detach when both overshoots are below threshold', () => {
+    expect(shouldDetachFromOvershoot(detachThresholdPx - 1, detachThresholdPx - 1)).toBe(false);
+  });
+
+  it('uses the max of both axes', () => {
+    expect(shouldDetachFromOvershoot(10, detachThresholdPx)).toBe(true);
+    expect(shouldDetachFromOvershoot(detachThresholdPx, 10)).toBe(true);
   });
 });
 
@@ -50,9 +92,28 @@ describe('shouldDetachOnDrop', () => {
 });
 
 describe('resolveDragVisualOffsetY', () => {
-  it('uses resistance before detach intent and raw delta after', () => {
-    expect(resolveDragVisualOffsetY({ deltaY: 80, detachIntentActive: false })).toBe(applyVerticalResistance(80));
-    expect(resolveDragVisualOffsetY({ deltaY: 80, detachIntentActive: true })).toBe(80);
+  it('applies resistance only to overshoot portion before detach', () => {
+    const result = resolveDragVisualOffsetY({ deltaY: 80, overshootY: 30, detachIntentActive: false });
+    expect(result).toBe(80 - 30 + applyResistance(30));
+  });
+
+  it('returns raw deltaY after detach', () => {
+    expect(resolveDragVisualOffsetY({ deltaY: 80, overshootY: 30, detachIntentActive: true })).toBe(80);
+  });
+});
+
+describe('resolveDragVisualOffsetX', () => {
+  it('applies resistance only to overshoot portion before detach', () => {
+    const result = resolveDragVisualOffsetX({ deltaX: 120, overshootX: 40, detachIntentActive: false });
+    expect(result).toBe(120 - 40 + applyResistance(40));
+  });
+
+  it('returns raw deltaX after detach', () => {
+    expect(resolveDragVisualOffsetX({ deltaX: 120, overshootX: 40, detachIntentActive: true })).toBe(120);
+  });
+
+  it('passes through deltaX when overshoot is zero', () => {
+    expect(resolveDragVisualOffsetX({ deltaX: 50, overshootX: 0, detachIntentActive: false })).toBe(50);
   });
 });
 
@@ -76,9 +137,20 @@ describe('resolveHoverPreviewWidthPx', () => {
 });
 
 describe('resolveDetachIntent', () => {
-  it('keeps detach intent active once threshold has been crossed', () => {
-    expect(resolveDetachIntent({ currentIntent: false, deltaY: detachThresholdPx + 1 })).toBe(true);
-    expect(resolveDetachIntent({ currentIntent: true, deltaY: 0 })).toBe(true);
+  it('activates from vertical overshoot exceeding threshold', () => {
+    expect(resolveDetachIntent({ currentIntent: false, overshootY: detachThresholdPx + 1 })).toBe(true);
+  });
+
+  it('activates from horizontal overshoot exceeding threshold', () => {
+    expect(resolveDetachIntent({ currentIntent: false, overshootX: detachThresholdPx + 1 })).toBe(true);
+  });
+
+  it('stays active once intent is set regardless of current overshoot', () => {
+    expect(resolveDetachIntent({ currentIntent: true, overshootX: 0, overshootY: 0 })).toBe(true);
+  });
+
+  it('stays inactive when both overshoots are below threshold', () => {
+    expect(resolveDetachIntent({ currentIntent: false, overshootX: 10, overshootY: 10 })).toBe(false);
   });
 });
 

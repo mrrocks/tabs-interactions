@@ -23,13 +23,16 @@ import {
   dragActivationDistancePx,
   detachThresholdPx,
   reentryPaddingPx,
+  resistanceOnsetInsetPx,
   windowAttachPaddingPx,
+  computeOvershoot,
   getInsertionIndexFromCenters,
   getProxySettleDelta,
   resolveDetachIntent,
   resolveDetachedTabWidth,
   resolveDropAttachTarget,
   resolveDropDetachIntent,
+  resolveDragVisualOffsetX,
   resolveDragVisualOffsetY,
   resolveSourceActivationIndexAfterDetach,
   shouldCloseSourcePanelAfterTransfer,
@@ -53,16 +56,19 @@ export {
   dragActivationDistancePx,
   detachThresholdPx,
   reentryPaddingPx,
+  resistanceFactor,
+  resistanceMaxPx,
+  resistanceOnsetInsetPx,
   windowAttachPaddingPx,
-  applyVerticalResistance,
-  shouldDetachFromVerticalDelta,
-  verticalResistanceFactor,
-  verticalResistanceMaxPx,
+  applyResistance,
+  computeOvershoot,
+  shouldDetachFromOvershoot,
   getInsertionIndexFromCenters,
   getProxySettleDelta,
   resolveDetachIntent,
   resolveDropAttachTarget,
   resolveDropDetachIntent,
+  resolveDragVisualOffsetX,
   resolveDragVisualOffsetY,
   resolveHoverPreviewWidthPx,
   resolveSourceActivationIndexAfterDetach,
@@ -70,7 +76,6 @@ export {
   shouldDetachOnDrop,
   shouldRemoveSourceWindowOnDetach
 } from './dragCalculations';
-
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -84,24 +89,42 @@ const tabAddSelector = '.tab--add';
 const closeButtonSelector = '.tab--close';
 const initializedRoots = new WeakSet();
 
-const isPointerInsideCurrentHeader = ({ tabList, clientX, clientY, padding = windowAttachPaddingPx }) => {
+const getDetachReferenceRect = (tabList) => {
   if (!tabList || typeof tabList.closest !== 'function') {
-    return false;
+    return null;
   }
 
   const panel = tabList.closest('.browser');
   if (!panel) {
-    return false;
+    return null;
   }
 
   const tabRow = typeof panel.querySelector === 'function' ? panel.querySelector('.tab--row') : null;
-  const headerRect =
+  const baseRect =
     tabRow && typeof tabRow.getBoundingClientRect === 'function'
       ? tabRow.getBoundingClientRect()
       : typeof tabList.getBoundingClientRect === 'function'
         ? tabList.getBoundingClientRect()
         : null;
 
+  if (!baseRect) {
+    return null;
+  }
+
+  const paddingTop = typeof globalThis.getComputedStyle === 'function'
+    ? parseFloat(getComputedStyle(panel).paddingTop) || 0
+    : 0;
+
+  return {
+    left: baseRect.left,
+    right: baseRect.right,
+    top: baseRect.top - paddingTop,
+    bottom: baseRect.bottom
+  };
+};
+
+const isPointerInsideCurrentHeader = ({ tabList, clientX, clientY, padding = windowAttachPaddingPx }) => {
+  const headerRect = getDetachReferenceRect(tabList);
   if (!headerRect) {
     return false;
   }
@@ -454,17 +477,29 @@ export const initializeTabDrag = ({
     const deltaY = clientY - dragState.startY;
     const wasDetached = dragState.detachIntentActive;
 
+    const refRect = getDetachReferenceRect(dragState.currentTabList);
+    const overshootX = refRect
+      ? computeOvershoot({ value: clientX, min: refRect.left, max: refRect.right, inset: resistanceOnsetInsetPx })
+      : 0;
+    const overshootY = refRect
+      ? computeOvershoot({ value: clientY, min: refRect.top, max: refRect.bottom, inset: resistanceOnsetInsetPx })
+      : 0;
+
     if (dragState.reattachArmed) {
       dragState.detachIntentActive = resolveDetachIntent({
         currentIntent: dragState.detachIntentActive,
-        deltaY
+        overshootX,
+        overshootY
       });
-    } else if (Math.abs(deltaY) < detachThresholdPx * 0.5) {
+    } else if (
+      Math.abs(overshootX) < detachThresholdPx * 0.5 &&
+      Math.abs(overshootY) < detachThresholdPx * 0.5
+    ) {
       dragState.reattachArmed = true;
     }
 
     if (!wasDetached && dragState.detachIntentActive) {
-      detachTransition.activate(deltaY);
+      detachTransition.activate({ overshootX, overshootY });
       if (dragState.dragProxy) {
         const panel = dragState.currentTabList?.closest?.('.browser');
         visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
@@ -499,11 +534,18 @@ export const initializeTabDrag = ({
       }
     }
 
+    const correction = detachTransition.sample();
+    const visualOffsetX = resolveDragVisualOffsetX({
+      deltaX,
+      overshootX,
+      detachIntentActive: dragState.detachIntentActive
+    }) + correction.x;
     const visualOffsetY = resolveDragVisualOffsetY({
       deltaY,
+      overshootY,
       detachIntentActive: dragState.detachIntentActive
-    }) + detachTransition.sample();
-    dragDomAdapter.setDragVisualTransform(dragState, deltaX, visualOffsetY);
+    }) + correction.y;
+    dragDomAdapter.setDragVisualTransform(dragState, visualOffsetX, visualOffsetY);
 
     if (!detachTransition.active && attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
       return;
@@ -522,7 +564,13 @@ export const initializeTabDrag = ({
 
     if (!dragState.dragProxy && moveResult.moved) {
       dragState.startX += moveResult.draggedBaseShiftX;
-      dragDomAdapter.setDragVisualTransform(dragState, clientX - dragState.startX, visualOffsetY);
+      const updatedDeltaX = clientX - dragState.startX;
+      const updatedVisualOffsetX = resolveDragVisualOffsetX({
+        deltaX: updatedDeltaX,
+        overshootX,
+        detachIntentActive: dragState.detachIntentActive
+      }) + correction.x;
+      dragDomAdapter.setDragVisualTransform(dragState, updatedVisualOffsetX, visualOffsetY);
     }
   };
 

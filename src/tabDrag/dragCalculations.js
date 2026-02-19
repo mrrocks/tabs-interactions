@@ -1,24 +1,37 @@
 import { clamp, toFiniteNumber } from '../shared/math';
 
 export const dragActivationDistancePx = 3;
-export const detachThresholdPx = 96;
+export const detachThresholdPx = 80;
 export const reentryPaddingPx = 16;
 export const windowAttachPaddingPx = 12;
-export const verticalResistanceFactor = 0.22;
-export const verticalResistanceMaxPx = 30;
+export const resistanceFactor = 0.22;
+export const resistanceMaxPx = 32;
+export const resistanceOnsetInsetPx = 12;
 export const reorderTriggerFraction = 0.1;
 
-export const applyVerticalResistance = (
-  deltaY,
-  resistanceFactor = verticalResistanceFactor,
-  maximumOffsetPx = verticalResistanceMaxPx
+export const applyResistance = (
+  overshoot,
+  factor = resistanceFactor,
+  maximumOffsetPx = resistanceMaxPx
 ) => {
-  const scaledDelta = toFiniteNumber(deltaY, 0) * resistanceFactor;
+  const scaledDelta = toFiniteNumber(overshoot, 0) * factor;
   return clamp(scaledDelta, -maximumOffsetPx, maximumOffsetPx);
 };
 
-export const shouldDetachFromVerticalDelta = (deltaY, thresholdPx = detachThresholdPx) =>
-  Math.abs(toFiniteNumber(deltaY, 0)) >= thresholdPx;
+export const computeOvershoot = ({ value, min, max, inset = resistanceOnsetInsetPx }) => {
+  const resolved = toFiniteNumber(value, 0);
+  const innerMin = min + inset;
+  const innerMax = max - inset;
+  if (resolved < innerMin) return resolved - innerMin;
+  if (resolved > innerMax) return resolved - innerMax;
+  return 0;
+};
+
+export const shouldDetachFromOvershoot = (
+  overshootX,
+  overshootY,
+  thresholdPx = detachThresholdPx
+) => Math.max(Math.abs(toFiniteNumber(overshootX, 0)), Math.abs(toFiniteNumber(overshootY, 0))) >= thresholdPx;
 
 export const getInsertionIndexFromCenters = ({ centers, pointerClientX }) => {
   const resolvedPointerX = toFiniteNumber(pointerClientX, 0);
@@ -34,8 +47,8 @@ export const getInsertionIndexFromCenters = ({ centers, pointerClientX }) => {
 
 export const shouldDetachOnDrop = ({ detachIntentActive }) => Boolean(detachIntentActive);
 
-export const resolveDetachIntent = ({ currentIntent, deltaY, thresholdPx = detachThresholdPx }) =>
-  Boolean(currentIntent) || shouldDetachFromVerticalDelta(deltaY, thresholdPx);
+export const resolveDetachIntent = ({ currentIntent, overshootX = 0, overshootY = 0, thresholdPx = detachThresholdPx }) =>
+  Boolean(currentIntent) || shouldDetachFromOvershoot(overshootX, overshootY, thresholdPx);
 
 export const shouldCloseSourcePanelAfterTransfer = ({
   sourceTabCountAfterMove
@@ -50,8 +63,11 @@ export const resolveSourceActivationIndexAfterDetach = (draggedTabIndex, remaini
   return Math.max(0, draggedTabIndex - 1);
 };
 
-export const resolveDragVisualOffsetY = ({ deltaY, detachIntentActive }) =>
-  detachIntentActive ? deltaY : applyVerticalResistance(deltaY);
+export const resolveDragVisualOffsetY = ({ deltaY, overshootY, detachIntentActive }) =>
+  detachIntentActive ? deltaY : deltaY - overshootY + applyResistance(overshootY);
+
+export const resolveDragVisualOffsetX = ({ deltaX, overshootX, detachIntentActive }) =>
+  detachIntentActive ? deltaX : deltaX - overshootX + applyResistance(overshootX);
 
 export const resolveHoverPreviewWidthPx = ({ dragProxyBaseRect, draggedTab }) => {
   const proxyBaseWidth = toFiniteNumber(dragProxyBaseRect?.width, 0);
