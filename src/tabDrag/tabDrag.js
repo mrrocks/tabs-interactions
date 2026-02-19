@@ -231,6 +231,8 @@ export const initializeTabDrag = ({
   };
 
   const commitDropAttach = ({ draggedTab, attachTargetTabList, pointerClientX }) => {
+    placeholderManager.restoreDisplay(draggedTab);
+
     const didCommitPreviewDrop = hoverPreview.commitDrop({
       draggedTab,
       attachTargetTabList
