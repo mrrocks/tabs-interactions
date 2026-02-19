@@ -4,6 +4,7 @@ import {
   getResizeDirection,
   getResizedFrame
 } from './panelResize';
+import { computePanelMinWidth } from './panelMinWidth';
 
 const resizeHitArea = 10;
 const grabCursor = 'grab';
@@ -58,13 +59,9 @@ export const initializePanelInteraction = (panel) => {
     return Number.isFinite(parsedValue) ? parsedValue : 0;
   };
 
-  const readPanelConstraints = () => {
+  const readPanelMinHeight = () => {
     const styles = window.getComputedStyle(panel);
-
-    return {
-      minWidth: parsePixels(styles.minWidth),
-      minHeight: parsePixels(styles.minHeight)
-    };
+    return parsePixels(styles.minHeight);
   };
 
   const setPanelFrame = (nextFrame) => {
@@ -245,6 +242,11 @@ export const initializePanelInteraction = (panel) => {
 
     const direction = updatePointerDirection(event.clientX, event.clientY);
     event.preventDefault();
+
+    if (direction) {
+      panelMinWidth = computePanelMinWidth(panel);
+    }
+
     interactionState = {
       mode: direction ? 'resize' : 'drag',
       pointerId: event.pointerId,
@@ -269,9 +271,7 @@ export const initializePanelInteraction = (panel) => {
   });
 
   panelFrame = readPanelFrame();
-  const panelConstraints = readPanelConstraints();
-  panelMinWidth = panelConstraints.minWidth;
-  panelMinHeight = panelConstraints.minHeight;
+  panelMinHeight = readPanelMinHeight();
 
   if (panelFrame) {
     setCursor(grabCursor);
