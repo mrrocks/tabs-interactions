@@ -232,52 +232,6 @@ body
     pointer-events: none
     will-change: transform
 
-  &.tab--dragging
-    cursor: grabbing
-    z-index: 100
-    transition: none
-    pointer-events: none
-
-    &::before
-      transition: none
-
-    .tab--shape
-      transition: none
-
-    .tab--close
-      transition: none
-
-  &.tab--dragging-active
-    color: var(--text-primary)
-    --label-close-button-gap: 20px
-    --label-fade-width: 40px
-
-    .tab--shape
-      opacity: 1
-      transform: translateY(0) scale(1)
-      border-radius: 12px
-
-      &::before,
-      &::after
-        opacity: 0
-        transform: translateY(4px)
-
-    .tab--close
-      opacity: 1
-      pointer-events: auto
-
-  &.tab--dragging-inactive
-    color: var(--text-primary)
-    --label-close-button-gap: 20px
-    --label-fade-width: 40px
-
-    &::before
-      opacity: 1
-
-    .tab--close
-      opacity: 1
-      pointer-events: auto
-
   &::before
     content: ''
     position: absolute
@@ -314,9 +268,8 @@ body
       bottom: 0
       width: 12px
       height: 12px
-      transform: translateY(4px)
+      clip-path: inset(100% 0 0 0)
       pointer-events: none
-      transition: transform var(--motion-transition-standard)
 
     &::before
       left: -12px
@@ -350,7 +303,54 @@ body
 
       &::before,
       &::after
-        transform: translateY(0)
+        opacity: 1
+        clip-path: inset(0 0 0 0)
+
+  &.tab--dragging
+    cursor: grabbing
+    z-index: 100
+    transition: none
+    pointer-events: none
+
+    &::before
+      transition: none
+
+    .tab--shape
+      transition: none
+
+      &::before,
+      &::after
+        opacity: 0
+        clip-path: inset(100% 0 0 0)
+
+    .tab--close
+      transition: none
+
+  &.tab--dragging-active
+    color: var(--text-primary)
+    --label-close-button-gap: 20px
+    --label-fade-width: 40px
+
+    .tab--shape
+      opacity: 1
+      transform: translateY(0) scale(1)
+      border-radius: 12px
+
+    .tab--close
+      opacity: 1
+      pointer-events: auto
+
+  &.tab--dragging-inactive
+    color: var(--text-primary)
+    --label-close-button-gap: 20px
+    --label-fade-width: 40px
+
+    &::before
+      opacity: 1
+
+    .tab--close
+      opacity: 1
+      pointer-events: auto
 
   &:focus-visible
     outline: 2px solid #00000033

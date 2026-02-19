@@ -38,6 +38,7 @@ import {
 import { createHoverPreviewManager } from './hoverPreviewManager';
 import { createDetachPlaceholderManager } from './detachPlaceholder';
 import { createDragVisualWidthManager } from './dragVisualWidth';
+import { animateCornerClipIn, animateCornerClipOut, animateShapeRadiusToDetached } from './cornerClipAnimation';
 
 export {
   dragActivationDistancePx,
@@ -64,6 +65,7 @@ export {
 const dragProxySettleDurationMs = 140;
 const detachCollapseDurationMs = 150;
 const hoverPreviewExpandDurationMs = 150;
+const cornerClipDurationMs = 150;
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -267,6 +269,11 @@ export const initializeTabDrag = ({
 
     const cleanupVisualState = () => {
       dragDomAdapter.cleanupVisualState(completedState);
+      if (completedState.draggedTab.classList.contains(activeTabClassName)) {
+        animateCornerClipIn(completedState.draggedTab, {
+          durationMs: scaleDurationMs(cornerClipDurationMs)
+        });
+      }
     };
 
     const settleVisualState = () => {
@@ -506,8 +513,15 @@ export const initializeTabDrag = ({
       return;
     }
 
+    const wasActive = dragState.draggedTab.classList.contains(activeTabClassName);
     dragState = markSessionAsActivated(dragState);
     dragDomAdapter.applyDragStyles(dragState);
+
+    if (wasActive && dragState.dragProxy) {
+      const durationMs = scaleDurationMs(cornerClipDurationMs);
+      animateCornerClipOut(dragState.dragProxy, { durationMs });
+      animateShapeRadiusToDetached(dragState.dragProxy, { durationMs });
+    }
 
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = 'none';
