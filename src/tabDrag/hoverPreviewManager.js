@@ -1,5 +1,4 @@
 import { toFiniteNumber } from '../shared/math';
-import { resolveHoverPreviewWidthPx } from './dragCalculations';
 
 export const createHoverPreviewManager = ({
   scaleDurationMs,
@@ -73,14 +72,9 @@ export const createHoverPreviewManager = ({
     return tab;
   };
 
-  const expand = (session) => {
+  const expand = () => {
     if (!previewTab) {
-      return;
-    }
-
-    const targetWidthPx = resolveHoverPreviewWidthPx(session);
-    if (targetWidthPx <= 0) {
-      return;
+      return null;
     }
 
     expanding = true;
@@ -89,15 +83,26 @@ export const createHoverPreviewManager = ({
     const tab = previewTab;
     const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
 
+    tab.style.minWidth = '';
+    tab.style.maxWidth = '';
+    tab.style.flex = '';
+
     if (typeof tab.animate !== 'function') {
-      tab.style.maxWidth = '';
-      tab.style.minWidth = '';
       expanding = false;
-      return;
+      return null;
+    }
+
+    const settledWidthPx = tab.getBoundingClientRect().width;
+    if (settledWidthPx <= 0) {
+      expanding = false;
+      return null;
     }
 
     animation = tab.animate(
-      [{ maxWidth: '0px' }, { maxWidth: `${targetWidthPx}px` }],
+      [
+        { minWidth: '0px', maxWidth: '0px' },
+        { minWidth: `${settledWidthPx}px`, maxWidth: `${settledWidthPx}px` }
+      ],
       { duration: durationMs, easing: 'ease', fill: 'forwards' }
     );
 
@@ -113,6 +118,8 @@ export const createHoverPreviewManager = ({
 
     animation.addEventListener('finish', onFinish);
     animation.addEventListener('cancel', onFinish);
+
+    return { targetWidthPx: settledWidthPx, durationMs };
   };
 
   const collapseAndRemove = () => {

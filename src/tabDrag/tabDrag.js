@@ -62,7 +62,7 @@ export {
 } from './dragCalculations';
 
 const dragProxySettleDurationMs = 140;
-const dragResizeTransitionDurationMs = 110;
+const dragResizeTransitionDurationMs = 150;
 const detachCollapseDurationMs = 150;
 const hoverPreviewExpandDurationMs = 150;
 
@@ -480,7 +480,10 @@ export const initializeTabDrag = ({
       });
 
       if (isFirstInsertion) {
-        hoverPreview.expand(dragState);
+        const expandTiming = hoverPreview.expand();
+        if (expandTiming) {
+          visualWidth.animateToWidth(dragState, expandTiming.targetWidthPx, expandTiming.durationMs);
+        }
       } else {
         visualWidth.syncWithHoverPreview(dragState, hoverPreview);
       }

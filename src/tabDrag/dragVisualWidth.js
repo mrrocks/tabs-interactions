@@ -3,6 +3,7 @@ import { resolveHoverPreviewWidthPx } from './dragCalculations';
 
 export const createDragVisualWidthManager = ({ scaleDurationMs, dragResizeTransitionDurationMs }) => {
   let transitionEnabled = false;
+  let activeAnimations = [];
 
   const enableTransition = (session) => {
     if (transitionEnabled || !session) {
@@ -66,6 +67,43 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, dragResizeTransi
     session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
   };
 
+  const cancelActiveAnimations = () => {
+    activeAnimations.forEach((anim) => anim.cancel());
+    activeAnimations = [];
+  };
+
+  const animateToWidth = (session, targetWidthPx, durationMs) => {
+    const resolvedWidthPx = toFiniteNumber(targetWidthPx, 0);
+    if (!session || resolvedWidthPx <= 0 || durationMs <= 0) {
+      return;
+    }
+
+    cancelActiveAnimations();
+
+    if (session.dragProxy) {
+      const currentProxyWidth = toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, resolvedWidthPx);
+      session.dragProxy.style.transition = 'none';
+      activeAnimations.push(session.dragProxy.animate(
+        [
+          { width: `${currentProxyWidth}px`, minWidth: `${currentProxyWidth}px`, maxWidth: `${currentProxyWidth}px` },
+          { width: `${resolvedWidthPx}px`, minWidth: `${resolvedWidthPx}px`, maxWidth: `${resolvedWidthPx}px` }
+        ],
+        { duration: durationMs, easing: 'ease', fill: 'forwards' }
+      ));
+    }
+
+    const currentTabWidth = toFiniteNumber(session.draggedTab.getBoundingClientRect?.().width, resolvedWidthPx);
+    session.draggedTab.style.transition = 'none';
+    activeAnimations.push(session.draggedTab.animate(
+      [
+        { flexBasis: `${currentTabWidth}px`, minWidth: `${currentTabWidth}px`, maxWidth: `${currentTabWidth}px` },
+        { flexBasis: `${resolvedWidthPx}px`, minWidth: `${resolvedWidthPx}px`, maxWidth: `${resolvedWidthPx}px` }
+      ],
+      { duration: durationMs, easing: 'ease', fill: 'forwards' }
+    ));
+    transitionEnabled = false;
+  };
+
   const syncWithHoverPreview = (session, hoverPreviewManager) => {
     if (
       !hoverPreviewManager.previewTab ||
@@ -85,11 +123,13 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, dragResizeTransi
   };
 
   const resetEnabled = () => {
+    cancelActiveAnimations();
     transitionEnabled = false;
   };
 
   return {
     apply,
+    animateToWidth,
     reset,
     syncWithHoverPreview,
     resetEnabled
