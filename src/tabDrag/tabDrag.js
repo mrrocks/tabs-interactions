@@ -538,10 +538,21 @@ export const initializeTabDrag = ({
     }
 
     if (!attachTarget) {
-      visualWidth.animateOut(hoverPreview.previewTab, (displacements) => {
-        animationCoordinator.animateSiblingDisplacement(displacements);
-      });
-      hoverPreview.detach();
+      const leavingSourceWhileDetached =
+        dragState.detachIntentActive && hoverPreview.previewTabList === sourceTabList;
+
+      if (leavingSourceWhileDetached && hoverPreview.previewTab) {
+        const previewWidthPx = hoverPreview.previewTab.getBoundingClientRect().width;
+        placeholderManager.ensureAt(hoverPreview.previewTab, dragState, previewWidthPx);
+        hoverPreview.clear();
+        visualWidth.cancelAll();
+      } else {
+        visualWidth.animateOut(hoverPreview.previewTab, (displacements) => {
+          animationCoordinator.animateSiblingDisplacement(displacements);
+        });
+        hoverPreview.detach();
+      }
+
       if (dragState.detachIntentActive) {
         const panel = sourceTabList?.closest?.('.browser');
         visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
@@ -552,16 +563,18 @@ export const initializeTabDrag = ({
     }
 
     if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
-      if (attachTarget === sourceTabList && placeholderManager.active) {
-        placeholderManager.remove();
-      }
+      const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
+      const placeholderWidthPx = replacingPlaceholder ? placeholderManager.currentWidthPx() : 0;
       hoverPreview.createAndAttach(attachTarget);
+      if (replacingPlaceholder) {
+        placeholderManager.replaceWith(hoverPreview.previewTab);
+      }
       moveTabWithLayoutPipeline({
         tabList: attachTarget,
         draggedTab: hoverPreview.previewTab,
         pointerClientX: clientX
       });
-      visualWidth.animateIn(dragState, hoverPreview.previewTab);
+      visualWidth.animateIn(dragState, hoverPreview.previewTab, { fromWidthPx: placeholderWidthPx });
     } else if (!visualWidth.animatingIn) {
       moveTabWithLayoutPipeline({
         tabList: attachTarget,

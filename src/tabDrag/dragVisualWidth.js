@@ -72,7 +72,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     ], animOptions);
   };
 
-  const animateIn = (session, previewTab) => {
+  const animateIn = (session, previewTab, { fromWidthPx = 0 } = {}) => {
     if (!previewTab || !session) {
       return;
     }
@@ -88,13 +88,15 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       return;
     }
 
+    const startWidthPx = Math.min(toFiniteNumber(fromWidthPx, 0), settledWidthPx);
+
     committedWidthPx = settledWidthPx;
     const animOptions = makeAnimOptions();
 
     animatingIn = true;
 
     const previewAnim = trackAnimation(previewTab, [
-      { minWidth: '0px', maxWidth: '0px' },
+      { minWidth: `${startWidthPx}px`, maxWidth: `${startWidthPx}px` },
       { minWidth: `${settledWidthPx}px`, maxWidth: `${settledWidthPx}px` }
     ], animOptions);
 
@@ -215,9 +217,9 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     get animatingIn() { return animatingIn; },
     animateIn,
     animateOut,
-    syncWidth,
-    reset,
     animateToDetachedWidth,
-    cancelAll
+    cancelAll,
+    reset,
+    syncWidth
   };
 };

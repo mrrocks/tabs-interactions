@@ -74,8 +74,8 @@ export const createHoverPreviewManager = ({
     get previewTab() { return previewTab; },
     get previewTabList() { return previewTabList; },
     clear,
-    detach,
+    commitDrop,
     createAndAttach,
-    commitDrop
+    detach
   };
 };

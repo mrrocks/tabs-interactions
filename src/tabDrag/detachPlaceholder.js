@@ -11,6 +11,15 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     el.style.maxWidth = `${widthPx}px`;
   };
 
+  const createPlaceholderElement = (widthPx) => {
+    const el = document.createElement('div');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.overflow = 'hidden';
+    el.style.height = '0';
+    setFlexWidth(el, widthPx);
+    return el;
+  };
+
   const remove = () => {
     if (!placeholder) {
       return;
@@ -21,21 +30,36 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
   };
 
   const ensure = (tabList, draggedTab, widthPx) => {
-    if (placeholder) {
+    if (placeholder || typeof document === 'undefined') {
       return;
     }
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const el = document.createElement('div');
-    el.setAttribute('aria-hidden', 'true');
-    el.style.overflow = 'hidden';
-    el.style.height = '0';
-    setFlexWidth(el, widthPx);
+    const el = createPlaceholderElement(widthPx);
     draggedTab.style.display = 'none';
     hiddenTab = draggedTab;
     tabList.insertBefore(el, draggedTab);
     placeholder = el;
+  };
+
+  const ensureAt = (existingElement, { draggedTab }, widthPx) => {
+    remove();
+    if (typeof document === 'undefined' || !existingElement) {
+      return;
+    }
+    const el = createPlaceholderElement(widthPx);
+    existingElement.replaceWith(el);
+    draggedTab.style.display = 'none';
+    hiddenTab = draggedTab;
+    placeholder = el;
+  };
+
+  const replaceWith = (element) => {
+    if (!placeholder || !element) {
+      remove();
+      return;
+    }
+    placeholder.replaceWith(element);
+    placeholder = null;
+    collapsed = false;
   };
 
   const sync = (shouldCollapse, { draggedTab, currentTabList, lockedTabWidthPx }) => {
@@ -55,16 +79,28 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     }
   };
 
+  const currentWidthPx = () => {
+    if (!placeholder || typeof placeholder.getBoundingClientRect !== 'function') {
+      return 0;
+    }
+    return placeholder.getBoundingClientRect().width;
+  };
+
+  const restoreDisplay = (draggedTab) => {
+    if (hiddenTab === draggedTab) {
+      draggedTab.style.display = '';
+      hiddenTab = null;
+    }
+    remove();
+  };
+
   return {
     get active() { return placeholder !== null; },
+    currentWidthPx,
+    ensureAt,
     remove,
-    sync,
-    restoreDisplay(draggedTab) {
-      if (hiddenTab === draggedTab) {
-        draggedTab.style.display = '';
-        hiddenTab = null;
-      }
-      remove();
-    }
+    replaceWith,
+    restoreDisplay,
+    sync
   };
 };

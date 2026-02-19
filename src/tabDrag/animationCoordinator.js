@@ -9,40 +9,40 @@ export const createAnimationCoordinator = ({
   const siblingAnimations = new WeakMap();
   const trackedElements = [];
 
-  const cancelSiblingAnimation = (tab) => {
-    const anim = siblingAnimations.get(tab);
-    if (!anim) {
-      return;
-    }
-    if (typeof anim.cancel === 'function') {
-      anim.cancel();
-    }
-    siblingAnimations.delete(tab);
-  };
-
   const cancelAllSiblingAnimations = () => {
-    for (let i = trackedElements.length - 1; i >= 0; i -= 1) {
-      cancelSiblingAnimation(trackedElements[i]);
+    const batch = trackedElements.splice(0);
+    for (const tab of batch) {
+      const anim = siblingAnimations.get(tab);
+      siblingAnimations.delete(tab);
+      if (anim && typeof anim.cancel === 'function') {
+        anim.cancel();
+      }
     }
-    trackedElements.length = 0;
   };
 
   const trackSiblingAnimation = (tab, anim) => {
-    cancelSiblingAnimation(tab);
+    const prev = siblingAnimations.get(tab);
+    if (prev && typeof prev.cancel === 'function') {
+      prev.cancel();
+    }
+
     siblingAnimations.set(tab, anim);
-    trackedElements.push(tab);
+    if (!prev) {
+      trackedElements.push(tab);
+    }
 
     if (typeof anim.addEventListener !== 'function') {
       return;
     }
 
     const cleanup = () => {
-      if (siblingAnimations.get(tab) === anim) {
-        siblingAnimations.delete(tab);
-        const idx = trackedElements.indexOf(tab);
-        if (idx !== -1) {
-          trackedElements.splice(idx, 1);
-        }
+      if (siblingAnimations.get(tab) !== anim) {
+        return;
+      }
+      siblingAnimations.delete(tab);
+      const idx = trackedElements.indexOf(tab);
+      if (idx !== -1) {
+        trackedElements.splice(idx, 1);
       }
     };
     anim.addEventListener('finish', cleanup);
@@ -135,9 +135,9 @@ export const createAnimationCoordinator = ({
   };
 
   return {
+    animateProxySettleToTarget,
     animateSiblingDisplacement,
     cancelAllSiblingAnimations,
-    animateProxySettleToTarget,
     finalizeOnAnimationSettled
   };
 };
