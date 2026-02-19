@@ -149,7 +149,6 @@ export const removeDetachedWindowIfEmpty = (panel) => {
 export const createDetachedWindow = ({
   sourcePanel,
   sourceTabList,
-  draggedTab,
   tabScreenRect
 }) => {
   if (typeof document === 'undefined') {
@@ -167,8 +166,7 @@ export const createDetachedWindow = ({
   panel.style.visibility = 'hidden';
   mountTarget.append(panel);
 
-  const draggedRect = draggedTab.getBoundingClientRect();
-  const placeholder = createTabPlaceholder(tabList, draggedRect);
+  const placeholder = createTabPlaceholder(tabList, tabScreenRect);
 
   const panelRect = panel.getBoundingClientRect();
   const placeholderRect = placeholder.getBoundingClientRect();

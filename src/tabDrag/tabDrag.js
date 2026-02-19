@@ -357,7 +357,6 @@ export const initializeTabDrag = ({
       const detachedWindow = createDetachedWindow({
         sourcePanel,
         sourceTabList,
-        draggedTab: completedState.draggedTab,
         tabScreenRect
       });
 
