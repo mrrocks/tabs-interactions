@@ -1,32 +1,3 @@
-import { clamp } from '../shared/math';
-
-export { clamp };
-
-export const clampFrameToViewport = ({
-  width,
-  height,
-  left,
-  top,
-  minWidth,
-  minHeight,
-  viewportWidth = Number.POSITIVE_INFINITY,
-  viewportHeight = Number.POSITIVE_INFINITY
-}) => {
-  const boundedMinWidth = Math.min(minWidth, viewportWidth);
-  const boundedMinHeight = Math.min(minHeight, viewportHeight);
-  const nextWidth = clamp(width, boundedMinWidth, viewportWidth);
-  const nextHeight = clamp(height, boundedMinHeight, viewportHeight);
-  const nextLeft = clamp(left, 0, Math.max(0, viewportWidth - nextWidth));
-  const nextTop = clamp(top, 0, Math.max(0, viewportHeight - nextHeight));
-
-  return {
-    width: nextWidth,
-    height: nextHeight,
-    left: nextLeft,
-    top: nextTop
-  };
-};
-
 const resizeCursorByDirection = {
   n: 'ns-resize',
   s: 'ns-resize',
@@ -94,9 +65,7 @@ export const getResizedFrame = ({
   clientX,
   clientY,
   minWidth,
-  minHeight,
-  viewportWidth = Number.POSITIVE_INFINITY,
-  viewportHeight = Number.POSITIVE_INFINITY
+  minHeight
 }) => {
   const resolvedDirection = direction ?? '';
   const deltaX = clientX - startX;
@@ -114,35 +83,26 @@ export const getResizedFrame = ({
   if (fromLeft) {
     const right = startLeft + startWidth;
     const rawWidth = startWidth - deltaX;
-    width = clamp(rawWidth, minWidth, Math.max(minWidth, right));
+    width = Math.max(rawWidth, minWidth);
     left = right - width;
   } else if (fromRight) {
     const rawWidth = startWidth + deltaX;
-    width = clamp(rawWidth, minWidth, Math.max(minWidth, viewportWidth - startLeft));
+    width = Math.max(rawWidth, minWidth);
     left = startLeft;
   }
 
   if (fromTop) {
     const bottom = startTop + startHeight;
     const rawHeight = startHeight - deltaY;
-    height = clamp(rawHeight, minHeight, Math.max(minHeight, bottom));
+    height = Math.max(rawHeight, minHeight);
     top = bottom - height;
   } else if (fromBottom) {
     const rawHeight = startHeight + deltaY;
-    height = clamp(rawHeight, minHeight, Math.max(minHeight, viewportHeight - startTop));
+    height = Math.max(rawHeight, minHeight);
     top = startTop;
   }
 
-  return clampFrameToViewport({
-    width,
-    height,
-    left,
-    top,
-    minWidth,
-    minHeight,
-    viewportWidth,
-    viewportHeight
-  });
+  return { width, height, left, top };
 };
 
 export const getDraggedFrame = ({
@@ -151,16 +111,13 @@ export const getDraggedFrame = ({
   startLeft,
   startTop,
   clientX,
-  clientY,
-  width,
-  height,
-  viewportWidth,
-  viewportHeight
+  clientY
 }) => {
   const deltaX = clientX - startX;
   const deltaY = clientY - startY;
-  const left = clamp(startLeft + deltaX, 0, Math.max(0, viewportWidth - width));
-  const top = clamp(startTop + deltaY, 0, Math.max(0, viewportHeight - height));
 
-  return { left, top };
+  return {
+    left: startLeft + deltaX,
+    top: startTop + deltaY
+  };
 };

@@ -1,5 +1,4 @@
 import {
-  clampFrameToViewport,
   getDraggedFrame,
   getResizeCursor,
   getResizeDirection,
@@ -29,8 +28,6 @@ export const initializePanelInteraction = (panel) => {
   let queuedClientX = 0;
   let queuedClientY = 0;
   let hasQueuedPointer = false;
-  let viewportWidth = 0;
-  let viewportHeight = 0;
   let activeCursor = '';
   let panelMinWidth = 0;
   let panelMinHeight = 0;
@@ -42,11 +39,6 @@ export const initializePanelInteraction = (panel) => {
 
     panel.style.cursor = nextCursor;
     activeCursor = nextCursor;
-  };
-
-  const refreshViewport = () => {
-    viewportWidth = window.innerWidth;
-    viewportHeight = window.innerHeight;
   };
 
   const readPanelFrame = () => {
@@ -143,9 +135,7 @@ export const initializePanelInteraction = (panel) => {
         clientX: queuedClientX,
         clientY: queuedClientY,
         minWidth: panelMinWidth,
-        minHeight: panelMinHeight,
-        viewportWidth,
-        viewportHeight
+        minHeight: panelMinHeight
       });
 
       setPanelFrame(frame);
@@ -155,11 +145,7 @@ export const initializePanelInteraction = (panel) => {
     const dragFrame = getDraggedFrame({
       ...interactionState,
       clientX: queuedClientX,
-      clientY: queuedClientY,
-      width: interactionState.startWidth,
-      height: interactionState.startHeight,
-      viewportWidth,
-      viewportHeight
+      clientY: queuedClientY
     });
 
     setPanelFrame({
@@ -229,28 +215,6 @@ export const initializePanelInteraction = (panel) => {
     clearInteractionListeners();
   };
 
-  const clampPanelToViewport = () => {
-    if (!panelFrame) {
-      return;
-    }
-
-    refreshViewport();
-
-    if (interactionState) {
-      return;
-    }
-
-    const frame = clampFrameToViewport({
-      ...panelFrame,
-      minWidth: panelMinWidth,
-      minHeight: panelMinHeight,
-      viewportWidth,
-      viewportHeight
-    });
-
-    setPanelFrame(frame);
-  };
-
   panel.addEventListener('pointermove', (event) => {
     if (interactionState) {
       return;
@@ -304,26 +268,14 @@ export const initializePanelInteraction = (panel) => {
     window.addEventListener('pointercancel', onPointerUp);
   });
 
-  refreshViewport();
   panelFrame = readPanelFrame();
   const panelConstraints = readPanelConstraints();
   panelMinWidth = panelConstraints.minWidth;
   panelMinHeight = panelConstraints.minHeight;
 
   if (panelFrame) {
-    setPanelFrame(
-      clampFrameToViewport({
-        ...panelFrame,
-        minWidth: panelMinWidth,
-        minHeight: panelMinHeight,
-        viewportWidth,
-        viewportHeight
-      })
-    );
     setCursor(grabCursor);
   }
-
-  window.addEventListener('resize', clampPanelToViewport);
 
   return true;
 };

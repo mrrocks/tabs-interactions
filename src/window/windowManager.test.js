@@ -1,28 +1,40 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  computeDetachedPanelFrame,
+  computeFrameFromTabAnchor,
   moveTabToList,
   removeDetachedWindowIfEmpty
 } from './windowManager';
 
-describe('computeDetachedPanelFrame', () => {
-  it('positions detached panel near pointer and keeps it in viewport', () => {
+describe('computeFrameFromTabAnchor', () => {
+  it('positions panel so tab slot aligns with the tab screen rect', () => {
     expect(
-      computeDetachedPanelFrame({
-        pointerClientX: 620,
-        pointerClientY: 420,
+      computeFrameFromTabAnchor({
+        tabScreenRect: { left: 250, top: 200, width: 140, height: 36 },
+        tabOffsetInPanel: { x: 90, y: 8 },
         panelWidth: 300,
-        panelHeight: 180,
-        viewportWidth: 700,
-        viewportHeight: 500,
-        anchorOffsetX: 180,
-        anchorOffsetY: 20
+        panelHeight: 180
       })
     ).toEqual({
       width: 300,
       height: 180,
-      left: 400,
-      top: 320
+      left: 160,
+      top: 192
+    });
+  });
+
+  it('allows panel to extend beyond the viewport', () => {
+    expect(
+      computeFrameFromTabAnchor({
+        tabScreenRect: { left: 30, top: 5, width: 140, height: 36 },
+        tabOffsetInPanel: { x: 90, y: 8 },
+        panelWidth: 300,
+        panelHeight: 180
+      })
+    ).toEqual({
+      width: 300,
+      height: 180,
+      left: -60,
+      top: -3
     });
   });
 });

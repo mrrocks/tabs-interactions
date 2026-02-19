@@ -1,51 +1,20 @@
-import { clamp, toFiniteNumber } from '../shared/math';
+import { toFiniteNumber } from '../shared/math';
 import { scaleDurationMs } from '../motion/motionSpeed';
 import { createWindowControlsElement, removePanel, windowControlsSelector } from './windowControls';
 import { bringToFront } from './windowFocus';
 
-const defaultDetachAnchorX = 180;
-const defaultDetachAnchorY = 20;
 const detachedWindowEnterDurationMs = 180;
 
-const resolveViewportSize = (viewportWidth, viewportHeight) => {
-  const hasWindow = typeof window !== 'undefined';
-  const resolvedViewportWidth =
-    viewportWidth === undefined ? (hasWindow ? window.innerWidth : Number.POSITIVE_INFINITY) : viewportWidth;
-  const resolvedViewportHeight =
-    viewportHeight === undefined ? (hasWindow ? window.innerHeight : Number.POSITIVE_INFINITY) : viewportHeight;
-
-  return {
-    viewportWidth: toFiniteNumber(resolvedViewportWidth, Number.POSITIVE_INFINITY),
-    viewportHeight: toFiniteNumber(resolvedViewportHeight, Number.POSITIVE_INFINITY)
-  };
-};
-
-export const computeDetachedPanelFrame = ({
-  pointerClientX,
-  pointerClientY,
+export const computeFrameFromTabAnchor = ({
+  tabScreenRect,
+  tabOffsetInPanel,
   panelWidth,
-  panelHeight,
-  viewportWidth,
-  viewportHeight,
-  anchorOffsetX = defaultDetachAnchorX,
-  anchorOffsetY = defaultDetachAnchorY
+  panelHeight
 }) => {
-  const { viewportWidth: resolvedViewportWidth, viewportHeight: resolvedViewportHeight } = resolveViewportSize(
-    viewportWidth,
-    viewportHeight
-  );
   const width = toFiniteNumber(panelWidth, 0);
   const height = toFiniteNumber(panelHeight, 0);
-  const left = clamp(
-    toFiniteNumber(pointerClientX, 0) - toFiniteNumber(anchorOffsetX, defaultDetachAnchorX),
-    0,
-    Math.max(0, resolvedViewportWidth - width)
-  );
-  const top = clamp(
-    toFiniteNumber(pointerClientY, 0) - toFiniteNumber(anchorOffsetY, defaultDetachAnchorY),
-    0,
-    Math.max(0, resolvedViewportHeight - height)
-  );
+  const left = toFiniteNumber(tabScreenRect.left, 0) - toFiniteNumber(tabOffsetInPanel.x, 0);
+  const top = toFiniteNumber(tabScreenRect.top, 0) - toFiniteNumber(tabOffsetInPanel.y, 0);
 
   return { width, height, left, top };
 };
@@ -59,34 +28,39 @@ export const applyPanelFrame = (panel, frame) => {
 
 const getDetachedWindowEnterDurationMs = () => scaleDurationMs(detachedWindowEnterDurationMs);
 
-const createDetachedWindowAnimation = ({ tabRect, frame }) => {
-  const scaleX = frame.width > 0 ? tabRect.width / frame.width : 1;
-  const scaleY = frame.height > 0 ? tabRect.height / frame.height : 1;
-  const translateX = tabRect.left - frame.left;
-  const translateY = tabRect.top - frame.top;
+const initialDetachScale = 0.6;
 
-  return [
-    {
-      transform: `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`,
-      opacity: '0.92'
-    },
-    {
-      transform: 'translate(0px, 0px) scale(1, 1)',
-      opacity: '1'
+export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, tabOffsetInPanel, tabScreenRect, frame, onComplete }) => {
+  const finalize = () => {
+    moveTabToList({ tab: draggedTab, tabList });
+    if (typeof onComplete === 'function') {
+      onComplete();
     }
-  ];
-};
+  };
 
-export const animateDetachedWindowFromTab = ({ panel, tabRect, frame }) => {
   if (typeof panel.animate !== 'function') {
+    finalize();
     return;
   }
 
-  const animation = panel.animate(createDetachedWindowAnimation({ tabRect, frame }), {
-    duration: getDetachedWindowEnterDurationMs(),
-    easing: 'ease',
-    fill: 'both'
-  });
+  const tabCenterX = toFiniteNumber(tabOffsetInPanel.x, 0) + toFiniteNumber(tabScreenRect.width, 0) / 2;
+  const tabCenterY = toFiniteNumber(tabOffsetInPanel.y, 0) + toFiniteNumber(tabScreenRect.height, 0) / 2;
+  const originX = frame.width > 0 ? (tabCenterX / frame.width) * 100 : 50;
+  const originY = frame.height > 0 ? (tabCenterY / frame.height) * 100 : 0;
+
+  panel.style.transformOrigin = `${originX}% ${originY}%`;
+
+  const animation = panel.animate(
+    [
+      { transform: `scale(${initialDetachScale})`, opacity: '0' },
+      { transform: 'scale(1)', opacity: '1' }
+    ],
+    {
+      duration: getDetachedWindowEnterDurationMs(),
+      easing: 'ease',
+      fill: 'both'
+    }
+  );
 
   if (animation && typeof animation.addEventListener === 'function') {
     animation.addEventListener('finish', () => {
@@ -95,6 +69,8 @@ export const animateDetachedWindowFromTab = ({ panel, tabRect, frame }) => {
       }
       panel.style.opacity = '';
       panel.style.transform = '';
+      panel.style.transformOrigin = '';
+      finalize();
     });
   }
 };
@@ -160,10 +136,7 @@ export const createDetachedWindow = ({
   sourcePanel,
   sourceTabList,
   draggedTab,
-  pointerClientX,
-  pointerClientY,
-  viewportWidth,
-  viewportHeight
+  tabScreenRect
 }) => {
   if (typeof document === 'undefined') {
     return null;
@@ -171,24 +144,48 @@ export const createDetachedWindow = ({
 
   const sourceRect = sourcePanel.getBoundingClientRect();
   const { panel, tabList } = createDetachedPanelElements({ sourcePanel, sourceTabList });
-  const frame = computeDetachedPanelFrame({
-    pointerClientX,
-    pointerClientY,
-    panelWidth: sourceRect.width,
-    panelHeight: sourceRect.height,
-    viewportWidth,
-    viewportHeight
+  const panelWidth = sourceRect.width;
+  const panelHeight = sourceRect.height;
+
+  const mountTarget = sourcePanel.parentElement ?? document.body;
+  panel.style.width = `${panelWidth}px`;
+  panel.style.height = `${panelHeight}px`;
+  panel.style.visibility = 'hidden';
+  mountTarget.append(panel);
+
+  const draggedRect = draggedTab.getBoundingClientRect();
+  const probe = document.createElement('div');
+  probe.style.flex = `0 0 ${draggedRect.width}px`;
+  probe.style.minWidth = `${draggedRect.width}px`;
+  probe.style.maxWidth = `${draggedRect.width}px`;
+  probe.style.height = `${draggedRect.height}px`;
+  probe.setAttribute('aria-hidden', 'true');
+  tabList.insertBefore(probe, getTabEndReference(tabList));
+
+  const panelRect = panel.getBoundingClientRect();
+  const probeRect = probe.getBoundingClientRect();
+  const tabOffsetInPanel = {
+    x: probeRect.left - panelRect.left,
+    y: probeRect.top - panelRect.top
+  };
+
+  probe.remove();
+
+  const frame = computeFrameFromTabAnchor({
+    tabScreenRect,
+    tabOffsetInPanel,
+    panelWidth,
+    panelHeight
   });
 
   applyPanelFrame(panel, frame);
-  const mountTarget = sourcePanel.parentElement ?? document.body;
-  mountTarget.append(panel);
+  panel.style.visibility = '';
   bringToFront(panel);
-  moveTabToList({ tab: draggedTab, tabList });
 
   return {
     panel,
     tabList,
-    frame
+    frame,
+    tabOffsetInPanel
   };
 };

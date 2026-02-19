@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  clampFrameToViewport,
   getDraggedFrame,
   getResizeCursor,
   getResizeDirection,
@@ -71,42 +70,38 @@ describe('getResizedFrame', () => {
     });
   });
 
-  it('keeps east resize inside the viewport', () => {
+  it('allows east resize past the viewport', () => {
     const nextFrame = getResizedFrame({
       ...baseState,
       direction: 'e',
       clientX: 800,
       clientY: 200,
       minWidth: 120,
-      minHeight: 80,
-      viewportWidth: 320,
-      viewportHeight: 500
+      minHeight: 80
     });
 
     expect(nextFrame).toEqual({
-      width: 220,
+      width: 880,
       height: 180,
       left: 100,
       top: 80
     });
   });
 
-  it('keeps west resize inside the viewport', () => {
+  it('allows west resize past the viewport', () => {
     const nextFrame = getResizedFrame({
       ...baseState,
       direction: 'w',
       clientX: -200,
       clientY: 200,
       minWidth: 120,
-      minHeight: 80,
-      viewportWidth: 600,
-      viewportHeight: 500
+      minHeight: 80
     });
 
     expect(nextFrame).toEqual({
-      width: 380,
+      width: 680,
       height: 180,
-      left: 0,
+      left: -300,
       top: 80
     });
   });
@@ -144,45 +139,19 @@ describe('getResizeCursor', () => {
 });
 
 describe('getDraggedFrame', () => {
-  it('clamps dragging to viewport limits', () => {
+  it('allows dragging past the viewport', () => {
     const nextFrame = getDraggedFrame({
       startX: 200,
       startY: 160,
       startLeft: 100,
       startTop: 80,
       clientX: 600,
-      clientY: 500,
-      width: 280,
-      height: 180,
-      viewportWidth: 360,
-      viewportHeight: 240
+      clientY: 500
     });
 
     expect(nextFrame).toEqual({
-      left: 80,
-      top: 60
-    });
-  });
-});
-
-describe('clampFrameToViewport', () => {
-  it('clamps an out-of-bounds frame after viewport shrink', () => {
-    const nextFrame = clampFrameToViewport({
-      width: 500,
-      height: 300,
-      left: 120,
-      top: 90,
-      minWidth: 120,
-      minHeight: 80,
-      viewportWidth: 320,
-      viewportHeight: 220
-    });
-
-    expect(nextFrame).toEqual({
-      width: 320,
-      height: 220,
-      left: 0,
-      top: 0
+      left: 500,
+      top: 420
     });
   });
 });

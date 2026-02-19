@@ -351,14 +351,16 @@ export const initializeTabDrag = ({
       }
       activateInSource?.();
     } else if (dropDestination === 'detach' && sourceTabList && sourcePanel) {
-      const sourceTabRect = dragDomAdapter.toRectSnapshot(completedState.draggedTab.getBoundingClientRect());
+      const proxyElement = completedState.dragProxy;
+      const tabScreenRect = proxyElement
+        ? dragDomAdapter.toRectSnapshot(proxyElement.getBoundingClientRect())
+        : dragDomAdapter.toRectSnapshot(completedState.draggedTab.getBoundingClientRect());
       const activateInSource = captureSourceActivation(completedState.draggedTab, sourceTabList);
       const detachedWindow = createDetachedWindow({
         sourcePanel,
         sourceTabList,
         draggedTab: completedState.draggedTab,
-        pointerClientX: completedState.lastClientX,
-        pointerClientY: completedState.lastClientY
+        tabScreenRect
       });
 
       if (detachedWindow) {
@@ -367,11 +369,21 @@ export const initializeTabDrag = ({
         if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
           removePanel(sourcePanel);
         }
-        animateDetachedWindowFromTab({ panel: detachedWindow.panel, tabRect: sourceTabRect, frame: detachedWindow.frame });
+        animateDetachedWindowFromTab({
+          panel: detachedWindow.panel,
+          draggedTab: completedState.draggedTab,
+          tabList: detachedWindow.tabList,
+          tabOffsetInPanel: detachedWindow.tabOffsetInPanel,
+          tabScreenRect,
+          frame: detachedWindow.frame,
+          onComplete: () => {
+            setActiveTab(detachedWindow.tabList, 0);
+            cleanupVisualState();
+          }
+        });
         activateInSource?.();
         hoverPreview.clear();
         visualWidth.reset(completedState);
-        cleanupVisualState();
 
         if (completedState.dragMoved) {
           signalDragCompleted();
