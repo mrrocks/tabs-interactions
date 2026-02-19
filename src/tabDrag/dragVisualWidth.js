@@ -194,12 +194,31 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
   };
 
+  const animateToDetachedWidth = (session, targetWidthPx) => {
+    if (!session?.dragProxy || !(targetWidthPx > 0)) {
+      return;
+    }
+
+    const currentWidth = toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, 0);
+    if (currentWidth <= 0 || Math.abs(currentWidth - targetWidthPx) < 1) {
+      return;
+    }
+
+    cancelAll();
+    committedWidthPx = targetWidthPx;
+
+    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
+    const animOptions = { duration: durationMs, easing: 'ease', fill: 'forwards' };
+    animateProxyAndTab(session, targetWidthPx, animOptions);
+  };
+
   return {
     get animatingIn() { return animatingIn; },
     animateIn,
     animateOut,
     syncWidth,
     reset,
+    animateToDetachedWidth,
     cancelAll
   };
 };

@@ -22,16 +22,16 @@ const animatePseudo = (shape, pseudo, keyframes, options) => {
   }
 };
 
-export const animateCornerClipIn = (tab, { durationMs, easing = 'ease' } = {}) => {
+export const animateCornerClipIn = (tab, { durationMs, easing = 'ease', fill = 'none' } = {}) => {
   const shape = resolveShape(tab);
   if (!shape) {
     return [];
   }
 
-  const options = { duration: durationMs, easing, fill: 'none' };
+  const options = { duration: durationMs, easing, fill };
   return [
-    animatePseudo(shape, '::before', [{ transform: TRANSLATE_HIDDEN_BEFORE }, { transform: TRANSLATE_VISIBLE }], options),
-    animatePseudo(shape, '::after', [{ transform: TRANSLATE_HIDDEN_AFTER }, { transform: TRANSLATE_VISIBLE }], options)
+    animatePseudo(shape, '::before', [{ transform: TRANSLATE_HIDDEN_BEFORE, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options),
+    animatePseudo(shape, '::after', [{ transform: TRANSLATE_HIDDEN_AFTER, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options)
   ].filter(Boolean);
 };
 

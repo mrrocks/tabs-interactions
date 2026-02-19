@@ -30,19 +30,20 @@ const getDetachedWindowEnterDurationMs = () => scaleDurationMs(detachedWindowEnt
 
 const initialDetachScale = 0.6;
 
-export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onComplete }) => {
-  const finalize = () => {
-    if (placeholder && typeof placeholder.remove === 'function') {
-      placeholder.remove();
-    }
-    moveTabToList({ tab: draggedTab, tabList });
+export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onTabInserted, onComplete }) => {
+  if (placeholder && typeof placeholder.remove === 'function') {
+    placeholder.remove();
+  }
+  moveTabToList({ tab: draggedTab, tabList });
+
+  if (typeof onTabInserted === 'function') {
+    onTabInserted();
+  }
+
+  if (typeof panel.animate !== 'function') {
     if (typeof onComplete === 'function') {
       onComplete();
     }
-  };
-
-  if (typeof panel.animate !== 'function') {
-    finalize();
     return;
   }
 
@@ -73,7 +74,9 @@ export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, place
       panel.style.opacity = '';
       panel.style.transform = '';
       panel.style.transformOrigin = '';
-      finalize();
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
     });
   }
 };

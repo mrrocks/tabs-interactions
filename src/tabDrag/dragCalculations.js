@@ -129,3 +129,10 @@ export const getProxySettleDelta = ({ proxyRect, targetRect }) => ({
   deltaX: targetRect.left - proxyRect.left,
   deltaY: targetRect.top - proxyRect.top
 });
+
+export const resolveDetachedTabWidth = (panel) => {
+  if (!panel || typeof globalThis.getComputedStyle !== 'function') {
+    return 0;
+  }
+  return parseFloat(getComputedStyle(panel).getPropertyValue('--tab-default-width')) || 0;
+};

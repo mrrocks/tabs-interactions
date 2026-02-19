@@ -27,6 +27,7 @@ import {
   getInsertionIndexFromCenters,
   getProxySettleDelta,
   resolveDetachIntent,
+  resolveDetachedTabWidth,
   resolveDropAttachTarget,
   resolveDropDetachIntent,
   resolveDragVisualOffsetY,
@@ -363,14 +364,38 @@ export const initializeTabDrag = ({
       if (detachedWindow) {
         initializePanelInteraction(detachedWindow.panel);
         initializeTabList(detachedWindow.tabList);
+
         animateDetachedWindowFromTab({
           ...detachedWindow,
           draggedTab: completedState.draggedTab,
           tabScreenRect,
-          onComplete: () => {
-            placeholderManager.restoreDisplay(completedState.draggedTab);
+          onTabInserted: () => {
+            const tab = completedState.draggedTab;
+            const proxy = completedState.dragProxy;
+            tab.classList.add(noTransitionClassName);
+            placeholderManager.restoreDisplay(tab);
+            tab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
+            tab.style.transform = '';
+            tab.style.transition = '';
+            tab.style.willChange = '';
+            tab.style.zIndex = '';
+            tab.style.visibility = 'hidden';
+            if (proxy && proxy.classList.contains(inactiveDragClassName)) {
+              proxy.classList.remove(dragClassName);
+              proxy.getBoundingClientRect();
+              proxy.classList.remove(inactiveDragClassName);
+              proxy.classList.add(activeDragClassName);
+              const durationMs = scaleDurationMs(cornerClipDurationMs);
+              animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
+              animateShapeRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
+            }
+            tab.getBoundingClientRect();
+            tab.classList.remove(noTransitionClassName);
             setActiveTab(detachedWindow.tabList, 0);
-            cleanupVisualState();
+          },
+          onComplete: () => {
+            completedState.draggedTab.style.visibility = '';
+            dragDomAdapter.removeDragProxy(completedState.dragProxy);
             if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
               removePanel(sourcePanel);
             }
@@ -378,7 +403,7 @@ export const initializeTabDrag = ({
         });
         activateInSource?.();
         hoverPreview.clear();
-        visualWidth.reset(completedState);
+        visualWidth.cancelAll();
 
         if (completedState.dragMoved) {
           signalDragCompleted();
@@ -497,7 +522,12 @@ export const initializeTabDrag = ({
         animationCoordinator.animateSiblingDisplacement(displacements);
       });
       hoverPreview.setPreview(null, null);
-      visualWidth.reset(dragState);
+      if (dragState.detachIntentActive) {
+        const panel = sourceTabList?.closest?.('.browser');
+        visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
+      } else {
+        visualWidth.reset(dragState);
+      }
       return false;
     }
 
