@@ -128,6 +128,8 @@ export const createHoverPreviewManager = ({
     }
 
     const tab = previewTab;
+    const currentWidth = toFiniteNumber(tab.getBoundingClientRect?.().width, 0);
+
     previewTab = null;
     previewTabList = null;
     expanding = false;
@@ -136,7 +138,6 @@ export const createHoverPreviewManager = ({
 
     tab.className = dragHoverPreviewClassName;
 
-    const currentWidth = toFiniteNumber(tab.getBoundingClientRect?.().width, 0);
     const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
 
     if (currentWidth <= 0 || typeof tab.animate !== 'function') {
@@ -144,10 +145,16 @@ export const createHoverPreviewManager = ({
       return;
     }
 
+    tab.style.minWidth = `${currentWidth}px`;
+    tab.style.maxWidth = `${currentWidth}px`;
+
     collapsingElement = tab;
 
     const collapseAnim = tab.animate(
-      [{ maxWidth: `${currentWidth}px` }, { maxWidth: '0px' }],
+      [
+        { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
+        { minWidth: '0px', maxWidth: '0px' }
+      ],
       { duration: durationMs, easing: 'ease', fill: 'forwards' }
     );
 
