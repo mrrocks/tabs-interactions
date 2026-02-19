@@ -44,6 +44,7 @@ import {
   animateShapeRadiusToAttached,
   animateShapeRadiusToDetached
 } from './cornerClipAnimation';
+import { animateDragShadowIn, animateDragShadowOut } from './dragShadowAnimation';
 
 export {
   dragActivationDistancePx,
@@ -71,6 +72,8 @@ const dragProxySettleDurationMs = 140;
 const detachCollapseDurationMs = 150;
 const hoverPreviewExpandDurationMs = 150;
 const cornerClipDurationMs = 150;
+const dragShadowInDurationMs = 150;
+const dragShadowOutDurationMs = 100;
 
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
@@ -382,6 +385,10 @@ export const initializeTabDrag = ({
     if (dropDestination !== 'attach') {
       visualWidth.reset(completedState);
     }
+    animateDragShadowOut(completedState.dragProxy, {
+      durationMs: scaleDurationMs(dragShadowOutDurationMs),
+      isActive: completedState.dragProxy?.classList.contains(activeDragClassName)
+    });
     settleVisualState();
 
     if (completedState.dragMoved) {
@@ -530,6 +537,13 @@ export const initializeTabDrag = ({
       const durationMs = scaleDurationMs(cornerClipDurationMs);
       animateCornerClipOut(dragState.dragProxy, { durationMs });
       animateShapeRadiusToDetached(dragState.dragProxy, { durationMs });
+    }
+
+    if (dragState.dragProxy) {
+      animateDragShadowIn(dragState.dragProxy, {
+        durationMs: scaleDurationMs(dragShadowInDurationMs),
+        isActive: wasActive
+      });
     }
 
     if (typeof document !== 'undefined' && document.body) {
