@@ -90,6 +90,9 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
     const startWidthPx = Math.min(toFiniteNumber(fromWidthPx, 0), settledWidthPx);
 
+    previewTab.style.minWidth = `${startWidthPx}px`;
+    previewTab.style.maxWidth = `${startWidthPx}px`;
+
     committedWidthPx = settledWidthPx;
     const animOptions = makeAnimOptions();
 
