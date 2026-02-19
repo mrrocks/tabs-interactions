@@ -399,6 +399,10 @@ export const initializeTabDrag = ({
               const durationMs = scaleDurationMs(dragTransitionDurationMs);
               animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
               animateShapeRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
+              animateDragShadowOut(proxy, {
+                durationMs: scaleDurationMs(dragShadowOutDurationMs),
+                isActive: true
+              });
             }
             tab.getBoundingClientRect();
             tab.classList.remove(noTransitionClassName);
