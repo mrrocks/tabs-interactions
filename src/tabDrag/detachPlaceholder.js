@@ -1,6 +1,7 @@
 export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapseDurationMs }) => {
   let placeholder = null;
   let collapsed = false;
+  let hiddenTab = null;
 
   const setFlexWidth = (el, widthPx) => {
     el.style.flex = `0 0 ${widthPx}px`;
@@ -30,6 +31,7 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     el.style.height = '0';
     setFlexWidth(el, widthPx);
     draggedTab.style.display = 'none';
+    hiddenTab = draggedTab;
     tabList.insertBefore(el, draggedTab);
     placeholder = el;
   };
@@ -56,10 +58,11 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
     remove,
     sync,
     restoreDisplay(draggedTab) {
-      if (placeholder) {
+      if (hiddenTab === draggedTab) {
         draggedTab.style.display = '';
-        remove();
+        hiddenTab = null;
       }
+      remove();
     }
   };
 };

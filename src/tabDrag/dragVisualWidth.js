@@ -1,52 +1,165 @@
 import { toFiniteNumber } from '../shared/math';
 import { resolveHoverPreviewWidthPx } from './dragCalculations';
 
-export const createDragVisualWidthManager = ({ scaleDurationMs, dragResizeTransitionDurationMs }) => {
-  let transitionEnabled = false;
+const ANIMATION_META_PROPS = new Set(['offset', 'easing', 'composite', 'computedOffset']);
+
+export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpandDurationMs }) => {
   let activeAnimations = [];
+  let animatingIn = false;
+  let committedWidthPx = 0;
 
-  const enableTransition = (session) => {
-    if (transitionEnabled || !session) {
-      return;
+  const commitStylesToElements = () => {
+    for (const anim of activeAnimations) {
+      const target = anim.effect?.target;
+      if (!target || anim.playState === 'idle') {
+        continue;
+      }
+      const keyframes = anim.effect.getKeyframes?.();
+      if (!keyframes || keyframes.length < 2) {
+        continue;
+      }
+      const last = keyframes[keyframes.length - 1];
+      for (const prop of Object.keys(last)) {
+        if (ANIMATION_META_PROPS.has(prop)) {
+          continue;
+        }
+        target.style[prop] = last[prop];
+      }
     }
-
-    const transitionDurationMs = scaleDurationMs(dragResizeTransitionDurationMs);
-    const proxyTransition = [
-      `width ${transitionDurationMs}ms ease`,
-      `min-width ${transitionDurationMs}ms ease`,
-      `max-width ${transitionDurationMs}ms ease`
-    ].join(', ');
-    const tabTransition = [
-      `flex-basis ${transitionDurationMs}ms ease`,
-      `min-width ${transitionDurationMs}ms ease`,
-      `max-width ${transitionDurationMs}ms ease`
-    ].join(', ');
-
-    if (session.dragProxy) {
-      session.dragProxy.style.transition = proxyTransition;
-    }
-    session.draggedTab.style.transition = tabTransition;
-    transitionEnabled = true;
   };
 
-  const apply = (session, widthPx) => {
-    const resolvedWidthPx = toFiniteNumber(widthPx, 0);
-    if (!session || resolvedWidthPx <= 0) {
+  const cancelAll = () => {
+    commitStylesToElements();
+    activeAnimations.forEach((anim) => anim.cancel());
+    activeAnimations = [];
+    animatingIn = false;
+    committedWidthPx = 0;
+  };
+
+  const trackAnimation = (element, keyframes, options) => {
+    if (typeof element?.animate !== 'function') {
+      return null;
+    }
+    const anim = element.animate(keyframes, options);
+    if (anim && typeof anim.cancel === 'function') {
+      activeAnimations.push(anim);
+    }
+    return anim;
+  };
+
+  const animateProxyAndTab = (session, targetWidthPx, animOptions) => {
+    if (session.dragProxy) {
+      const currentProxyWidth = toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, targetWidthPx);
+      session.dragProxy.style.transition = 'none';
+      trackAnimation(session.dragProxy, [
+        { width: `${currentProxyWidth}px`, minWidth: `${currentProxyWidth}px`, maxWidth: `${currentProxyWidth}px` },
+        { width: `${targetWidthPx}px`, minWidth: `${targetWidthPx}px`, maxWidth: `${targetWidthPx}px` }
+      ], animOptions);
+    }
+
+    const currentTabWidth = toFiniteNumber(session.draggedTab.getBoundingClientRect?.().width, targetWidthPx);
+    session.draggedTab.style.transition = 'none';
+    trackAnimation(session.draggedTab, [
+      { flexBasis: `${currentTabWidth}px`, minWidth: `${currentTabWidth}px`, maxWidth: `${currentTabWidth}px` },
+      { flexBasis: `${targetWidthPx}px`, minWidth: `${targetWidthPx}px`, maxWidth: `${targetWidthPx}px` }
+    ], animOptions);
+  };
+
+  const animateIn = (session, previewTab) => {
+    if (!previewTab || !session) {
       return;
     }
 
-    enableTransition(session);
+    cancelAll();
 
-    if (session.dragProxy) {
-      session.dragProxy.style.width = `${resolvedWidthPx}px`;
-      session.dragProxy.style.minWidth = `${resolvedWidthPx}px`;
-      session.dragProxy.style.maxWidth = `${resolvedWidthPx}px`;
+    previewTab.style.minWidth = '';
+    previewTab.style.maxWidth = '';
+    previewTab.style.flex = '';
+
+    const settledWidthPx = previewTab.getBoundingClientRect().width;
+    if (settledWidthPx <= 0) {
+      return;
     }
 
-    session.draggedTab.style.flex = `0 1 ${resolvedWidthPx}px`;
-    session.draggedTab.style.flexBasis = `${resolvedWidthPx}px`;
-    session.draggedTab.style.minWidth = `${resolvedWidthPx}px`;
-    session.draggedTab.style.maxWidth = `${resolvedWidthPx}px`;
+    committedWidthPx = settledWidthPx;
+    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
+    const animOptions = { duration: durationMs, easing: 'ease', fill: 'forwards' };
+
+    animatingIn = true;
+
+    const previewAnim = trackAnimation(previewTab, [
+      { minWidth: '0px', maxWidth: '0px' },
+      { minWidth: `${settledWidthPx}px`, maxWidth: `${settledWidthPx}px` }
+    ], animOptions);
+
+    if (previewAnim) {
+      const onDone = () => { animatingIn = false; };
+      previewAnim.addEventListener('finish', onDone);
+      previewAnim.addEventListener('cancel', onDone);
+    } else {
+      animatingIn = false;
+    }
+
+    animateProxyAndTab(session, settledWidthPx, animOptions);
+  };
+
+  const animateOut = (previewTab) => {
+    if (!previewTab) {
+      return;
+    }
+
+    const currentWidth = toFiniteNumber(previewTab.getBoundingClientRect?.().width, 0);
+
+    cancelAll();
+
+    if (currentWidth <= 0 || typeof previewTab.animate !== 'function') {
+      previewTab.remove();
+      return;
+    }
+
+    previewTab.style.minWidth = `${currentWidth}px`;
+    previewTab.style.maxWidth = `${currentWidth}px`;
+
+    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
+
+    const anim = previewTab.animate(
+      [
+        { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
+        { minWidth: '0px', maxWidth: '0px' }
+      ],
+      { duration: durationMs, easing: 'ease', fill: 'forwards' }
+    );
+
+    const onDone = () => previewTab.remove();
+    anim.addEventListener('finish', onDone);
+    anim.addEventListener('cancel', onDone);
+  };
+
+  const syncWidth = (session, previewTab) => {
+    if (animatingIn) {
+      return;
+    }
+
+    if (!previewTab || !session || typeof previewTab.getBoundingClientRect !== 'function') {
+      return;
+    }
+
+    const previewWidthPx = toFiniteNumber(previewTab.getBoundingClientRect().width, 0);
+    if (previewWidthPx <= 0) {
+      return;
+    }
+
+    if (committedWidthPx > 0 && Math.abs(previewWidthPx - committedWidthPx) < 1) {
+      return;
+    }
+
+    committedWidthPx = previewWidthPx;
+    cancelAll();
+
+    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
+    const animOptions = { duration: durationMs, easing: 'ease', fill: 'forwards' };
+
+    animateProxyAndTab(session, previewWidthPx, animOptions);
   };
 
   const reset = (session) => {
@@ -67,71 +180,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, dragResizeTransi
     session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
   };
 
-  const cancelActiveAnimations = () => {
-    activeAnimations.forEach((anim) => anim.cancel());
-    activeAnimations = [];
-  };
-
-  const animateToWidth = (session, targetWidthPx, durationMs) => {
-    const resolvedWidthPx = toFiniteNumber(targetWidthPx, 0);
-    if (!session || resolvedWidthPx <= 0 || durationMs <= 0) {
-      return;
-    }
-
-    cancelActiveAnimations();
-
-    if (session.dragProxy) {
-      const currentProxyWidth = toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, resolvedWidthPx);
-      session.dragProxy.style.transition = 'none';
-      activeAnimations.push(session.dragProxy.animate(
-        [
-          { width: `${currentProxyWidth}px`, minWidth: `${currentProxyWidth}px`, maxWidth: `${currentProxyWidth}px` },
-          { width: `${resolvedWidthPx}px`, minWidth: `${resolvedWidthPx}px`, maxWidth: `${resolvedWidthPx}px` }
-        ],
-        { duration: durationMs, easing: 'ease', fill: 'forwards' }
-      ));
-    }
-
-    const currentTabWidth = toFiniteNumber(session.draggedTab.getBoundingClientRect?.().width, resolvedWidthPx);
-    session.draggedTab.style.transition = 'none';
-    activeAnimations.push(session.draggedTab.animate(
-      [
-        { flexBasis: `${currentTabWidth}px`, minWidth: `${currentTabWidth}px`, maxWidth: `${currentTabWidth}px` },
-        { flexBasis: `${resolvedWidthPx}px`, minWidth: `${resolvedWidthPx}px`, maxWidth: `${resolvedWidthPx}px` }
-      ],
-      { duration: durationMs, easing: 'ease', fill: 'forwards' }
-    ));
-    transitionEnabled = false;
-  };
-
-  const syncWithHoverPreview = (session, hoverPreviewManager) => {
-    if (
-      !hoverPreviewManager.previewTab ||
-      !session ||
-      hoverPreviewManager.expanding ||
-      typeof hoverPreviewManager.previewTab.getBoundingClientRect !== 'function'
-    ) {
-      return;
-    }
-
-    const previewWidthPx = toFiniteNumber(hoverPreviewManager.previewTab.getBoundingClientRect().width, 0);
-    if (previewWidthPx <= 0) {
-      return;
-    }
-
-    apply(session, previewWidthPx);
-  };
-
-  const resetEnabled = () => {
-    cancelActiveAnimations();
-    transitionEnabled = false;
-  };
-
   return {
-    apply,
-    animateToWidth,
+    get animatingIn() { return animatingIn; },
+    animateIn,
+    animateOut,
+    syncWidth,
     reset,
-    syncWithHoverPreview,
-    resetEnabled
+    cancelAll
   };
 };

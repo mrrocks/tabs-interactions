@@ -81,17 +81,20 @@ export const resolveDropAttachTarget = ({
   attachTargetTabList,
   hoverAttachTabList,
   sourceTabList,
+  allowSourceReattach = false,
   dropClientX,
   dropClientY,
   hoverAttachClientX,
   hoverAttachClientY,
   fallbackRadiusPx = 48
 }) => {
-  if (attachTargetTabList && attachTargetTabList !== sourceTabList) {
+  const isSourceExcluded = (target) => target === sourceTabList && !allowSourceReattach;
+
+  if (attachTargetTabList && !isSourceExcluded(attachTargetTabList)) {
     return attachTargetTabList;
   }
 
-  if (!hoverAttachTabList || hoverAttachTabList === sourceTabList) {
+  if (!hoverAttachTabList || isSourceExcluded(hoverAttachTabList)) {
     return null;
   }
 

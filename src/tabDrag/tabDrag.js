@@ -62,7 +62,6 @@ export {
 } from './dragCalculations';
 
 const dragProxySettleDurationMs = 140;
-const dragResizeTransitionDurationMs = 150;
 const detachCollapseDurationMs = 150;
 const hoverPreviewExpandDurationMs = 150;
 
@@ -146,8 +145,6 @@ export const initializeTabDrag = ({
     defaultAttachPaddingPx: reentryPaddingPx
   });
   const hoverPreview = createHoverPreviewManager({
-    scaleDurationMs,
-    hoverPreviewExpandDurationMs,
     tabItemClassName: tabSelector.slice(1),
     dragHoverPreviewClassName
   });
@@ -157,7 +154,7 @@ export const initializeTabDrag = ({
   });
   const visualWidth = createDragVisualWidthManager({
     scaleDurationMs,
-    dragResizeTransitionDurationMs
+    hoverPreviewExpandDurationMs
   });
 
   let dragState = null;
@@ -244,9 +241,7 @@ export const initializeTabDrag = ({
     dragState = null;
     hasQueuedPointer = false;
     sourceWindowRemovedDuringDetach = false;
-    visualWidth.resetEnabled();
-    hoverPreview.expanding = false;
-    hoverPreview.cancelAnimation();
+    visualWidth.cancelAll();
     clearGlobalListeners();
     placeholderManager.restoreDisplay(completedState.draggedTab);
 
@@ -290,16 +285,18 @@ export const initializeTabDrag = ({
     const sourceTabList = completedState.currentTabList;
     const sourcePanel =
       sourceTabList && typeof sourceTabList.closest === 'function' ? sourceTabList.closest('.browser') : null;
+    const sourceReattachActive = completedState.detachIntentActive && hoverPreview.previewTabList === sourceTabList;
     const resolvedAttachTargetTabList = dropResolver.resolveAttachTargetTabList({
       clientX: completedState.lastClientX,
       clientY: completedState.lastClientY,
-      excludedTabList: sourceTabList,
+      excludedTabList: sourceReattachActive ? null : sourceTabList,
       padding: windowAttachPaddingPx
     });
     const attachTargetTabList = resolveDropAttachTarget({
       attachTargetTabList: resolvedAttachTargetTabList,
       hoverAttachTabList: completedState.hoverAttachTabList,
       sourceTabList,
+      allowSourceReattach: sourceReattachActive,
       dropClientX: completedState.lastClientX,
       dropClientY: completedState.lastClientY,
       hoverAttachClientX: completedState.hoverAttachClientX,
@@ -321,13 +318,16 @@ export const initializeTabDrag = ({
     });
 
     if (dropDestination === 'attach' && sourceTabList && sourcePanel) {
-      const activateInSource = captureSourceActivation(completedState.draggedTab, sourceTabList);
+      const isCrossListAttach = attachTargetTabList !== sourceTabList;
+      const activateInSource = isCrossListAttach
+        ? captureSourceActivation(completedState.draggedTab, sourceTabList)
+        : null;
       commitDropAttach({
         draggedTab: completedState.draggedTab,
         attachTargetTabList,
         pointerClientX: completedState.lastClientX
       });
-      if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
+      if (isCrossListAttach && shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
         removePanel(sourcePanel);
       }
       activateInSource?.();
@@ -404,7 +404,8 @@ export const initializeTabDrag = ({
         }
       }
 
-      if (!isLastTab && dragState.detachIntentActive) {
+      const previewOccupiesSource = hoverPreview.previewTabList === dragState.currentTabList;
+      if (!isLastTab && dragState.detachIntentActive && !previewOccupiesSource) {
         const insideHeader = isPointerInsideCurrentHeader({
           tabList: dragState.currentTabList,
           clientX,
@@ -449,7 +450,7 @@ export const initializeTabDrag = ({
     const attachTarget = dropResolver.resolveAttachTargetTabList({
       clientX,
       clientY,
-      excludedTabList: sourceTabList,
+      excludedTabList: dragState.detachIntentActive ? null : sourceTabList,
       padding: windowAttachPaddingPx
     });
 
@@ -460,33 +461,31 @@ export const initializeTabDrag = ({
     }
 
     if (!attachTarget) {
-      hoverPreview.collapseAndRemove();
+      visualWidth.animateOut(hoverPreview.previewTab);
+      hoverPreview.setPreview(null, null);
       visualWidth.reset(dragState);
       return false;
     }
 
-    let isFirstInsertion = false;
     if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
       hoverPreview.clear();
+      if (attachTarget === sourceTabList && placeholderManager.active) {
+        placeholderManager.remove();
+      }
       hoverPreview.setPreview(hoverPreview.create(), attachTarget);
-      isFirstInsertion = true;
-    }
-
-    if (hoverPreview.previewTab && (isFirstInsertion || !hoverPreview.expanding)) {
       moveTabWithLayoutPipeline({
         tabList: attachTarget,
         draggedTab: hoverPreview.previewTab,
         pointerClientX: clientX
       });
-
-      if (isFirstInsertion) {
-        const expandTiming = hoverPreview.expand();
-        if (expandTiming) {
-          visualWidth.animateToWidth(dragState, expandTiming.targetWidthPx, expandTiming.durationMs);
-        }
-      } else {
-        visualWidth.syncWithHoverPreview(dragState, hoverPreview);
-      }
+      visualWidth.animateIn(dragState, hoverPreview.previewTab);
+    } else if (!visualWidth.animatingIn) {
+      moveTabWithLayoutPipeline({
+        tabList: attachTarget,
+        draggedTab: hoverPreview.previewTab,
+        pointerClientX: clientX
+      });
+      visualWidth.syncWidth(dragState, hoverPreview.previewTab);
     }
 
     return true;
@@ -640,7 +639,7 @@ export const initializeTabDrag = ({
     queuedClientY = event.clientY;
     hasQueuedPointer = true;
     sourceWindowRemovedDuringDetach = false;
-    visualWidth.resetEnabled();
+    visualWidth.cancelAll();
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
