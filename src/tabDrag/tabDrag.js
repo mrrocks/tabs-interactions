@@ -8,6 +8,7 @@ import {
   createDetachedWindow,
   moveTabToList
 } from '../window/windowManager';
+import { bringToFront } from '../window/windowFocus';
 import {
   createDragSession,
   isSessionAttachedDrag,
@@ -619,6 +620,10 @@ export const initializeTabDrag = ({
     }
 
     if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
+      const targetPanel = attachTarget.closest?.('.browser');
+      if (targetPanel) {
+        bringToFront(targetPanel);
+      }
       const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
       const placeholderWidthPx = replacingPlaceholder ? placeholderManager.currentWidthPx() : 0;
       hoverPreview.createAndAttach(attachTarget);

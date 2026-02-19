@@ -98,9 +98,13 @@ const createTabList = (tabIds, { left = 0, top = 0 } = {}) => {
   return tabList;
 };
 
+let panelZCounter = 0;
+
 const createPanel = (tabList) => {
+  panelZCounter += 1;
   const panel = {
     tabList,
+    style: { zIndex: String(panelZCounter) },
     tabRow: {
       getBoundingClientRect: () => ({
         left: tabList.left,
@@ -164,8 +168,8 @@ describe('tab drag integration flows', () => {
   it('resolves attach target from panel hover region', () => {
     const sourceTabList = createTabList(['tab-a'], { left: 40, top: 20 });
     const targetTabList = createTabList(['tab-b', 'tab-c'], { left: 400, top: 20 });
+    const sourcePanel = createPanel(sourceTabList);
     const targetPanel = createPanel(targetTabList);
-    createPanel(sourceTabList);
     const panelHoverElement = {
       closest: (selector) => (selector === '.browser' ? targetPanel : null)
     };
@@ -174,7 +178,8 @@ describe('tab drag integration flows', () => {
       defaultAttachPaddingPx: 16
     });
     const documentRef = {
-      querySelectorAll: () => [sourceTabList, targetTabList],
+      querySelectorAll: (selector) =>
+        selector === '.browser' ? [sourcePanel, targetPanel] : [sourceTabList, targetTabList],
       elementsFromPoint: () => [panelHoverElement]
     };
 
@@ -188,13 +193,111 @@ describe('tab drag integration flows', () => {
     expect(attachTarget).toBe(targetTabList);
   });
 
+  it('does not resolve attach target when pointer is occluded by higher panel', () => {
+    const targetTabList = createTabList(['tab-c'], { left: 80, top: 20 });
+    const sourceTabList = createTabList(['tab-a', 'tab-b'], { left: 40, top: 20 });
+    const targetPanel = createPanel(targetTabList);
+    const sourcePanel = createPanel(sourceTabList);
+    const sourcePanelHit = {
+      closest: (selector) => {
+        if (selector === '.browser') return sourcePanel;
+        return null;
+      }
+    };
+    const dropResolver = createDropResolver({
+      tabListSelector: '.tab--list',
+      defaultAttachPaddingPx: 16
+    });
+    const documentRef = {
+      querySelectorAll: (selector) =>
+        selector === '.browser' ? [targetPanel, sourcePanel] : [sourceTabList, targetTabList],
+      elementsFromPoint: () => [sourcePanelHit]
+    };
+
+    const attachTarget = dropResolver.resolveAttachTargetTabList({
+      clientX: 100,
+      clientY: 30,
+      excludedTabList: sourceTabList,
+      documentRef
+    });
+
+    expect(attachTarget).toBeNull();
+  });
+
+  it('resolves foreground panel tab list when panels overlap during detached drag', () => {
+    const backgroundTabList = createTabList(['tab-x'], { left: 100, top: 20 });
+    const foregroundTabList = createTabList(['tab-a', 'tab-b'], { left: 60, top: 20 });
+    const backgroundPanel = createPanel(backgroundTabList);
+    const foregroundPanel = createPanel(foregroundTabList);
+    const foregroundPanelHit = {
+      closest: (selector) => {
+        if (selector === '.browser') return foregroundPanel;
+        return null;
+      }
+    };
+    const dropResolver = createDropResolver({
+      tabListSelector: '.tab--list',
+      defaultAttachPaddingPx: 16
+    });
+    const documentRef = {
+      querySelectorAll: (selector) =>
+        selector === '.browser'
+          ? [backgroundPanel, foregroundPanel]
+          : [backgroundTabList, foregroundTabList],
+      elementsFromPoint: () => [foregroundPanelHit]
+    };
+
+    const attachTarget = dropResolver.resolveAttachTargetTabList({
+      clientX: 140,
+      clientY: 30,
+      excludedTabList: null,
+      documentRef
+    });
+
+    expect(attachTarget).toBe(foregroundTabList);
+  });
+
+  it('blocks background window when foreground panel occludes during detached drag', () => {
+    const backgroundTabList = createTabList(['tab-x'], { left: 100, top: 20 });
+    const foregroundTabList = createTabList(['tab-a', 'tab-b'], { left: 60, top: 20 });
+    const backgroundPanel = createPanel(backgroundTabList);
+    const foregroundPanel = createPanel(foregroundTabList);
+    const foregroundPanelHit = {
+      closest: (selector) => {
+        if (selector === '.browser') return foregroundPanel;
+        return null;
+      }
+    };
+    const dropResolver = createDropResolver({
+      tabListSelector: '.tab--list',
+      defaultAttachPaddingPx: 16
+    });
+    const documentRef = {
+      querySelectorAll: (selector) =>
+        selector === '.browser'
+          ? [backgroundPanel, foregroundPanel]
+          : [backgroundTabList, foregroundTabList],
+      elementsFromPoint: () => [foregroundPanelHit]
+    };
+
+    const attachTarget = dropResolver.resolveAttachTargetTabList({
+      clientX: 140,
+      clientY: 30,
+      excludedTabList: foregroundTabList,
+      documentRef
+    });
+
+    expect(attachTarget).toBeNull();
+  });
+
   it('does not resolve attach target from panel body', () => {
     const sourceTabList = createTabList(['tab-a'], { left: 40, top: 20 });
     const targetTabList = createTabList(['tab-b', 'tab-c'], { left: 400, top: 20 });
+    const sourcePanel = createPanel(sourceTabList);
     const targetPanel = createPanel(targetTabList);
-    createPanel(sourceTabList);
     const documentRef = {
-      querySelectorAll: () => [sourceTabList, targetTabList],
+      querySelectorAll: (selector) =>
+        selector === '.browser' ? [sourcePanel, targetPanel] : [sourceTabList, targetTabList],
       elementsFromPoint: () => []
     };
     const dropResolver = createDropResolver({
@@ -352,9 +455,15 @@ describe('tab drag integration flows', () => {
       return tabList;
     };
 
+    let panelStubZCounter = 0;
+    const allPanelStubs = [];
     const createPanelStub = (tabList) => {
+      panelStubZCounter += 1;
+      const panelHeight = 320;
+      const getPanelWidth = () => Math.max(getTabNodes(tabList).length, 1) * tabWidthPx + 160;
       const panel = {
         tabList,
+        style: { zIndex: String(panelStubZCounter) },
         querySelector: (selector) => {
           if (selector === '.tab--list') {
             return tabList;
@@ -373,17 +482,21 @@ describe('tab drag integration flows', () => {
           }
           return null;
         },
-        getBoundingClientRect: () => ({
-          left: tabList.left,
-          right: tabList.left + 640,
-          top: tabList.top,
-          bottom: tabList.top + 320,
-          width: 640,
-          height: 320
-        }),
+        getBoundingClientRect: () => {
+          const width = getPanelWidth();
+          return {
+            left: tabList.left,
+            right: tabList.left + width,
+            top: tabList.top,
+            bottom: tabList.top + panelHeight,
+            width,
+            height: panelHeight
+          };
+        },
         remove: () => {}
       };
       tabList.panel = panel;
+      allPanelStubs.push(panel);
       return panel;
     };
 
@@ -538,7 +651,11 @@ describe('tab drag integration flows', () => {
         append: () => {}
       },
       createElement: () => createDocumentElementStub(),
-      querySelectorAll: (selector) => (selector === '.tab--list' ? [sourceTabList, targetTabList] : []),
+      querySelectorAll: (selector) => {
+        if (selector === '.tab--list') return [sourceTabList, targetTabList];
+        if (selector === '.browser') return allPanelStubs;
+        return [];
+      },
       elementsFromPoint: (clientX, clientY) => {
         const targetRect = targetTabList.getBoundingClientRect();
         if (
@@ -700,7 +817,8 @@ describe('tab drag integration flows', () => {
         width: '',
         height: '',
         left: '',
-        top: ''
+        top: '',
+        zIndex: '1'
       },
       removed: false,
       getBoundingClientRect: () => ({
@@ -809,7 +927,11 @@ describe('tab drag integration flows', () => {
         classList: createClassList(),
         append: () => {}
       },
-      querySelectorAll: (selector) => (selector === '.tab--list' ? [tabList] : []),
+      querySelectorAll: (selector) => {
+        if (selector === '.tab--list') return [tabList];
+        if (selector === '.browser') return [sourcePanel];
+        return [];
+      },
       elementsFromPoint: () => [],
       addEventListener: () => {},
       removeEventListener: () => {}
