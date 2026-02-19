@@ -9,6 +9,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
   let animatingIn = false;
   let committedWidthPx = 0;
 
+  const makeAnimOptions = () => ({
+    duration: scaleDurationMs(hoverPreviewExpandDurationMs),
+    easing: dragTransitionEasing,
+    fill: 'forwards'
+  });
+
   const commitStylesToElements = () => {
     for (const anim of activeAnimations) {
       const target = anim.effect?.target;
@@ -83,8 +89,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     }
 
     committedWidthPx = settledWidthPx;
-    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-    const animOptions = { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' };
+    const animOptions = makeAnimOptions();
 
     animatingIn = true;
 
@@ -120,14 +125,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     previewTab.style.minWidth = `${currentWidth}px`;
     previewTab.style.maxWidth = `${currentWidth}px`;
 
-    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-
     const anim = previewTab.animate(
       [
         { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
         { minWidth: '0px', maxWidth: '0px' }
       ],
-      { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' }
+      makeAnimOptions()
     );
 
     const onDone = () => {
@@ -171,10 +174,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     committedWidthPx = previewWidthPx;
     cancelAll();
 
-    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-    const animOptions = { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' };
-
-    animateProxyAndTab(session, previewWidthPx, animOptions);
+    animateProxyAndTab(session, previewWidthPx, makeAnimOptions());
   };
 
   const reset = (session) => {
@@ -208,9 +208,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     cancelAll();
     committedWidthPx = targetWidthPx;
 
-    const durationMs = scaleDurationMs(hoverPreviewExpandDurationMs);
-    const animOptions = { duration: durationMs, easing: dragTransitionEasing, fill: 'forwards' };
-    animateProxyAndTab(session, targetWidthPx, animOptions);
+    animateProxyAndTab(session, targetWidthPx, makeAnimOptions());
   };
 
   return {

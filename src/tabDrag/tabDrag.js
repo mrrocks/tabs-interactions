@@ -147,6 +147,7 @@ export const initializeTabDrag = ({
     getTabs,
     getInsertionIndexFromCenters,
     moveTabToList,
+    onBeforeMeasure: animationCoordinator.cancelAllSiblingAnimations,
     tabAddSelector
   });
   const dropResolver = createDropResolver({
@@ -540,7 +541,7 @@ export const initializeTabDrag = ({
       visualWidth.animateOut(hoverPreview.previewTab, (displacements) => {
         animationCoordinator.animateSiblingDisplacement(displacements);
       });
-      hoverPreview.setPreview(null, null);
+      hoverPreview.detach();
       if (dragState.detachIntentActive) {
         const panel = sourceTabList?.closest?.('.browser');
         visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
@@ -551,11 +552,10 @@ export const initializeTabDrag = ({
     }
 
     if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
-      hoverPreview.clear();
       if (attachTarget === sourceTabList && placeholderManager.active) {
         placeholderManager.remove();
       }
-      hoverPreview.setPreview(hoverPreview.create(), attachTarget);
+      hoverPreview.createAndAttach(attachTarget);
       moveTabWithLayoutPipeline({
         tabList: attachTarget,
         draggedTab: hoverPreview.previewTab,

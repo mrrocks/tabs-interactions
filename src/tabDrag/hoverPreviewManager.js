@@ -5,6 +5,11 @@ export const createHoverPreviewManager = ({
   let previewTab = null;
   let previewTabList = null;
 
+  const detach = () => {
+    previewTab = null;
+    previewTabList = null;
+  };
+
   const clear = () => {
     if (!previewTab) {
       return;
@@ -19,11 +24,12 @@ export const createHoverPreviewManager = ({
       previewTab.parentNode.removeChild(previewTab);
     }
 
-    previewTab = null;
-    previewTabList = null;
+    detach();
   };
 
-  const create = () => {
+  const createAndAttach = (tabList) => {
+    clear();
+
     if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
       return null;
     }
@@ -39,6 +45,8 @@ export const createHoverPreviewManager = ({
     tab.style.minWidth = '0';
     tab.style.maxWidth = '0';
 
+    previewTab = tab;
+    previewTabList = tabList;
     return tab;
   };
 
@@ -62,17 +70,12 @@ export const createHoverPreviewManager = ({
     return true;
   };
 
-  const setPreview = (tab, tabList) => {
-    previewTab = tab;
-    previewTabList = tabList;
-  };
-
   return {
     get previewTab() { return previewTab; },
     get previewTabList() { return previewTabList; },
     clear,
-    create,
-    commitDrop,
-    setPreview
+    detach,
+    createAndAttach,
+    commitDrop
   };
 };

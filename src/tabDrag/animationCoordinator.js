@@ -6,6 +6,49 @@ export const createAnimationCoordinator = ({
   dragProxySettleDurationMs = dragTransitionDurationMs,
   siblingDisplacementDurationMs = dragTransitionDurationMs
 }) => {
+  const siblingAnimations = new WeakMap();
+  const trackedElements = [];
+
+  const cancelSiblingAnimation = (tab) => {
+    const anim = siblingAnimations.get(tab);
+    if (!anim) {
+      return;
+    }
+    if (typeof anim.cancel === 'function') {
+      anim.cancel();
+    }
+    siblingAnimations.delete(tab);
+  };
+
+  const cancelAllSiblingAnimations = () => {
+    for (let i = trackedElements.length - 1; i >= 0; i -= 1) {
+      cancelSiblingAnimation(trackedElements[i]);
+    }
+    trackedElements.length = 0;
+  };
+
+  const trackSiblingAnimation = (tab, anim) => {
+    cancelSiblingAnimation(tab);
+    siblingAnimations.set(tab, anim);
+    trackedElements.push(tab);
+
+    if (typeof anim.addEventListener !== 'function') {
+      return;
+    }
+
+    const cleanup = () => {
+      if (siblingAnimations.get(tab) === anim) {
+        siblingAnimations.delete(tab);
+        const idx = trackedElements.indexOf(tab);
+        if (idx !== -1) {
+          trackedElements.splice(idx, 1);
+        }
+      }
+    };
+    anim.addEventListener('finish', cleanup);
+    anim.addEventListener('cancel', cleanup);
+  };
+
   const animateSiblingDisplacement = (displacements) => {
     const duration = scaleDurationMs(siblingDisplacementDurationMs);
 
@@ -14,13 +57,17 @@ export const createAnimationCoordinator = ({
         return;
       }
 
-      tab.animate(
+      const anim = tab.animate(
         [{ transform: `translate3d(${deltaX}px, 0px, 0px)` }, { transform: 'translate3d(0px, 0px, 0px)' }],
         {
           duration,
           easing: dragTransitionEasing
         }
       );
+
+      if (anim) {
+        trackSiblingAnimation(tab, anim);
+      }
     });
   };
 
@@ -89,6 +136,7 @@ export const createAnimationCoordinator = ({
 
   return {
     animateSiblingDisplacement,
+    cancelAllSiblingAnimations,
     animateProxySettleToTarget,
     finalizeOnAnimationSettled
   };

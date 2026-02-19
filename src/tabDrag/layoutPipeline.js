@@ -8,15 +8,13 @@ export const createLayoutPipeline = ({
   getTabs,
   getInsertionIndexFromCenters,
   moveTabToList,
+  onBeforeMeasure,
   tabAddSelector = '.tab--add'
 }) => {
-  let frameToken = 0;
   let measurementCache = new Map();
 
   const beginFrame = () => {
-    frameToken += 1;
     measurementCache = new Map();
-    return frameToken;
   };
 
   const clearFrameCache = () => {
@@ -25,12 +23,7 @@ export const createLayoutPipeline = ({
 
   const measureRect = (element) => {
     if (!element || typeof element.getBoundingClientRect !== 'function') {
-      return {
-        left: 0,
-        top: 0,
-        width: 0,
-        height: 0
-      };
+      return { left: 0, top: 0, width: 0, height: 0 };
     }
 
     const cached = measurementCache.get(element);
@@ -64,6 +57,11 @@ export const createLayoutPipeline = ({
         draggedBaseShiftX: 0,
         displacements: []
       };
+    }
+
+    if (typeof onBeforeMeasure === 'function') {
+      onBeforeMeasure();
+      clearFrameCache();
     }
 
     const beforeLeftMap = new Map(siblingTabs.map((tab) => [tab, measureRect(tab).left]));
@@ -100,8 +98,6 @@ export const createLayoutPipeline = ({
 
   return {
     beginFrame,
-    clearFrameCache,
-    measureRect,
     moveTabToPointerPosition
   };
 };
