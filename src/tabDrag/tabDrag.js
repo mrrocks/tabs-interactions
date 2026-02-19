@@ -377,6 +377,10 @@ export const initializeTabDrag = ({
             tab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
             tab.style.transform = '';
             tab.style.transition = '';
+            tab.style.flex = '';
+            tab.style.flexBasis = '';
+            tab.style.minWidth = '';
+            tab.style.maxWidth = '';
             tab.style.willChange = '';
             tab.style.zIndex = '';
             tab.style.visibility = 'hidden';
@@ -706,6 +710,7 @@ export const initializeTabDrag = ({
         transform: draggedTab.style.transform,
         transition: draggedTab.style.transition,
         flex: draggedTab.style.flex,
+        flexBasis: draggedTab.style.flexBasis,
         minWidth: draggedTab.style.minWidth,
         maxWidth: draggedTab.style.maxWidth,
         willChange: draggedTab.style.willChange,

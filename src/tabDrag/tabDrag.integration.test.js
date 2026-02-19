@@ -563,9 +563,14 @@ describe('tab drag integration flows', () => {
 
     class ElementStub {}
 
+    const previousRAF = globalThis.requestAnimationFrame;
+    const previousCAF = globalThis.cancelAnimationFrame;
+
     globalThis.window = windowStub;
     globalThis.document = documentStub;
     globalThis.Element = ElementStub;
+    globalThis.requestAnimationFrame = windowStub.requestAnimationFrame;
+    globalThis.cancelAnimationFrame = windowStub.cancelAnimationFrame;
 
     try {
       initializeTabDrag({ root });
@@ -617,6 +622,8 @@ describe('tab drag integration flows', () => {
       globalThis.window = previousWindow;
       globalThis.document = previousDocument;
       globalThis.Element = previousElement;
+      globalThis.requestAnimationFrame = previousRAF;
+      globalThis.cancelAnimationFrame = previousCAF;
     }
   });
 

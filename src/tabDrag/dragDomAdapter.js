@@ -115,6 +115,7 @@ export const createDragDomAdapter = ({
     draggedTab.style.transform = initialInlineStyles.transform;
     draggedTab.style.transition = initialInlineStyles.transition;
     draggedTab.style.flex = initialInlineStyles.flex;
+    draggedTab.style.flexBasis = initialInlineStyles.flexBasis;
     draggedTab.style.minWidth = initialInlineStyles.minWidth;
     draggedTab.style.maxWidth = initialInlineStyles.maxWidth;
     draggedTab.style.willChange = initialInlineStyles.willChange;
