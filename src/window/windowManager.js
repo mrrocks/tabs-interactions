@@ -1,9 +1,28 @@
 import { toFiniteNumber } from '../shared/math';
 import { scaleDurationMs } from '../motion/motionSpeed';
-import { createWindowControlsElement, removePanel, windowControlsSelector } from './windowControls';
+import { createWindowControlsElement, windowControlsSelector } from './windowControls';
 import { bringToFront } from './windowFocus';
 
-const detachedWindowEnterDurationMs = 180;
+export const removePanel = (panel) => {
+  if (!panel) {
+    return false;
+  }
+
+  if (typeof panel.remove === 'function') {
+    panel.remove();
+    return true;
+  }
+
+  if (panel.parentNode && typeof panel.parentNode.removeChild === 'function') {
+    panel.parentNode.removeChild(panel);
+    return true;
+  }
+
+  return false;
+};
+
+const panelScaleTransitionMs = 180;
+const panelDetachScale = 0.6;
 
 export const computeFrameFromTabAnchor = ({
   tabScreenRect,
@@ -26,26 +45,34 @@ export const applyPanelFrame = (panel, frame) => {
   panel.style.top = `${frame.top}px`;
 };
 
-const getDetachedWindowEnterDurationMs = () => scaleDurationMs(detachedWindowEnterDurationMs);
+const getScaledPanelTransitionMs = () => scaleDurationMs(panelScaleTransitionMs);
 
-const initialDetachScale = 0.6;
+const runPanelScaleAnimation = (panel, keyframes, onFinish) => {
+  if (typeof panel.animate !== 'function') {
+    onFinish?.();
+    return null;
+  }
+
+  const animation = panel.animate(keyframes, {
+    duration: getScaledPanelTransitionMs(),
+    easing: 'ease',
+    fill: 'both'
+  });
+
+  animation?.addEventListener?.('finish', () => {
+    animation.cancel?.();
+    onFinish?.();
+  });
+
+  return animation;
+};
 
 export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onTabInserted, onComplete }) => {
   if (placeholder && typeof placeholder.remove === 'function') {
     placeholder.remove();
   }
   moveTabToList({ tab: draggedTab, tabList });
-
-  if (typeof onTabInserted === 'function') {
-    onTabInserted();
-  }
-
-  if (typeof panel.animate !== 'function') {
-    if (typeof onComplete === 'function') {
-      onComplete();
-    }
-    return;
-  }
+  onTabInserted?.();
 
   const tabCenterX = toFiniteNumber(tabOffsetInPanel.x, 0) + toFiniteNumber(tabScreenRect.width, 0) / 2;
   const tabCenterY = toFiniteNumber(tabOffsetInPanel.y, 0) + toFiniteNumber(tabScreenRect.height, 0) / 2;
@@ -54,31 +81,19 @@ export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, place
 
   panel.style.transformOrigin = `${originX}% ${originY}%`;
 
-  const animation = panel.animate(
+  runPanelScaleAnimation(
+    panel,
     [
-      { transform: `scale(${initialDetachScale})`, opacity: '0' },
+      { transform: `scale(${panelDetachScale})`, opacity: '0' },
       { transform: 'scale(1)', opacity: '1' }
     ],
-    {
-      duration: getDetachedWindowEnterDurationMs(),
-      easing: 'ease',
-      fill: 'both'
-    }
-  );
-
-  if (animation && typeof animation.addEventListener === 'function') {
-    animation.addEventListener('finish', () => {
-      if (typeof animation.cancel === 'function') {
-        animation.cancel();
-      }
+    () => {
       panel.style.opacity = '';
       panel.style.transform = '';
       panel.style.transformOrigin = '';
-      if (typeof onComplete === 'function') {
-        onComplete();
-      }
-    });
-  }
+      onComplete?.();
+    }
+  );
 };
 
 const createDetachedPanelElements = ({ sourcePanel, sourceTabList }) => {
@@ -146,7 +161,45 @@ export const removeDetachedWindowIfEmpty = (panel) => {
     return false;
   }
 
-  return removePanel(panel);
+  animatedRemovePanel(panel);
+  return true;
+};
+
+const resolveAnchorOrigin = (panel, anchor) => {
+  if (!anchor) {
+    return '50% 0%';
+  }
+  const panelRect = panel.getBoundingClientRect();
+  const anchorRect = anchor.getBoundingClientRect();
+  const cx = anchorRect.left + anchorRect.width / 2 - panelRect.left;
+  const cy = anchorRect.top + anchorRect.height / 2 - panelRect.top;
+  const ox = panelRect.width > 0 ? (cx / panelRect.width) * 100 : 50;
+  const oy = panelRect.height > 0 ? (cy / panelRect.height) * 100 : 0;
+  return `${ox}% ${oy}%`;
+};
+
+export const animatedRemovePanel = (panel, { anchor } = {}) => {
+  if (!panel) {
+    return false;
+  }
+
+  if (typeof panel.animate !== 'function') {
+    return removePanel(panel);
+  }
+
+  panel.style.transformOrigin = resolveAnchorOrigin(panel, anchor);
+  panel.style.pointerEvents = 'none';
+
+  runPanelScaleAnimation(
+    panel,
+    [
+      { transform: 'scale(1)', opacity: '1' },
+      { transform: `scale(${panelDetachScale})`, opacity: '0' }
+    ],
+    () => removePanel(panel)
+  );
+
+  return true;
 };
 
 export const createDetachedWindow = ({

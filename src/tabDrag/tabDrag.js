@@ -4,10 +4,10 @@ import { activeTabClassName } from '../tabs/tabState';
 import { getTabs, setActiveTab, tabListSelector, tabSelector } from '../tabs/tabs';
 import {
   animateDetachedWindowFromTab,
+  animatedRemovePanel,
   createDetachedWindow,
   moveTabToList
 } from '../window/windowManager';
-import { removePanel } from '../window/windowControls';
 import {
   createDragSession,
   isSessionAttachedDrag,
@@ -351,7 +351,7 @@ export const initializeTabDrag = ({
         pointerClientX: completedState.lastClientX
       });
       if (isCrossListAttach && shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
-        removePanel(sourcePanel);
+        animatedRemovePanel(sourcePanel);
       }
       activateInSource?.();
     } else if (dropDestination === 'detach' && sourceTabList && sourcePanel) {
@@ -413,7 +413,7 @@ export const initializeTabDrag = ({
             completedState.draggedTab.style.visibility = '';
             dragDomAdapter.removeDragProxy(completedState.dragProxy);
             if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
-              removePanel(sourcePanel);
+              animatedRemovePanel(sourcePanel);
             }
           }
         });
@@ -482,7 +482,7 @@ export const initializeTabDrag = ({
 
         if (sourcePanel) {
           dragState.sourcePanelRect = dragDomAdapter.toRectSnapshot(sourcePanel.getBoundingClientRect());
-          if (removePanel(sourcePanel)) {
+          if (animatedRemovePanel(sourcePanel)) {
             sourceWindowRemovedDuringDetach = true;
           }
         }

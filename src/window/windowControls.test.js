@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { closeWindowControlSelector, initializeWindowControls, removePanel } from './windowControls';
+import { closeWindowControlSelector, initializeWindowControls } from './windowControls';
+import { removePanel } from './windowManager';
 
 describe('removePanel', () => {
   it('removes panel through panel.remove when available', () => {

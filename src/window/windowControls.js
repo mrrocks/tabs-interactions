@@ -1,27 +1,10 @@
 import { isEventTargetElement } from '../shared/dom';
+import { animatedRemovePanel } from './windowManager';
 
 export const closeWindowControlSelector = '[data-window-control="close"]';
 export const windowControlsSelector = '.window--controls';
 const windowPanelSelector = '.browser';
 const initializedRoots = new WeakSet();
-
-export const removePanel = (panel) => {
-  if (!panel) {
-    return false;
-  }
-
-  if (typeof panel.remove === 'function') {
-    panel.remove();
-    return true;
-  }
-
-  if (panel.parentNode && typeof panel.parentNode.removeChild === 'function') {
-    panel.parentNode.removeChild(panel);
-    return true;
-  }
-
-  return false;
-};
 
 export const createWindowControlsElement = (documentRef = document) => {
   const controls = documentRef.createElement('div');
@@ -70,7 +53,7 @@ export const initializeWindowControls = (root = document) => {
 
     event.preventDefault();
     event.stopPropagation();
-    removePanel(panel);
+    animatedRemovePanel(panel, { anchor: closeControl });
   });
 
   return true;
