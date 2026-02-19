@@ -68,7 +68,7 @@ export {
   shouldRemoveSourceWindowOnDetach
 } from './dragCalculations';
 
-const dragProxySettleDurationMs = 140;
+const dragProxySettleDurationMs = 150;
 const detachCollapseDurationMs = 150;
 const hoverPreviewExpandDurationMs = 150;
 const cornerClipDurationMs = 150;

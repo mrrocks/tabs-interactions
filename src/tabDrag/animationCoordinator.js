@@ -1,7 +1,7 @@
 export const createAnimationCoordinator = ({
   scaleDurationMs,
   getProxySettleDelta,
-  dragProxySettleDurationMs = 140,
+  dragProxySettleDurationMs = 150,
   siblingDisplacementDurationMs = 150
 }) => {
   const animateSiblingDisplacement = (displacements) => {
