@@ -1,5 +1,6 @@
 import { toFiniteNumber } from '../shared/math';
 import { toRectSnapshot } from '../shared/dom';
+import { reorderTriggerFraction } from './dragCalculations';
 
 const getSiblingTabs = (getTabs, tabList, draggedTab) => getTabs(tabList).filter((tab) => tab !== draggedTab);
 
@@ -44,13 +45,16 @@ export const createLayoutPipeline = ({
 
   const getTabEndReference = (tabList) => tabList.querySelector(tabAddSelector) ?? null;
 
-  const moveTabToPointerPosition = ({ tabList, draggedTab, pointerClientX }) => {
+  const moveTabToPointerPosition = ({ tabList, draggedTab, pointerClientX, dragDirectionSign = 0 }) => {
     const siblingTabs = getSiblingTabs(getTabs, tabList, draggedTab);
-    const centers = siblingTabs.map((tab) => {
+    const triggerFraction = dragDirectionSign === 0
+      ? 0.5
+      : dragDirectionSign > 0 ? reorderTriggerFraction : 1 - reorderTriggerFraction;
+    const thresholds = siblingTabs.map((tab) => {
       const rect = measureRect(tab);
-      return rect.left + rect.width / 2;
+      return rect.left + rect.width * triggerFraction;
     });
-    const targetIndex = getInsertionIndexFromCenters({ centers, pointerClientX });
+    const targetIndex = getInsertionIndexFromCenters({ centers: thresholds, pointerClientX });
     const currentTabs = getTabs(tabList);
     const currentIndex = currentTabs.indexOf(draggedTab);
 

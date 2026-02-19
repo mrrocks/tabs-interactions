@@ -1,11 +1,12 @@
 import { clamp, toFiniteNumber } from '../shared/math';
 
 export const dragActivationDistancePx = 3;
-export const detachThresholdPx = 56;
+export const detachThresholdPx = 96;
 export const reentryPaddingPx = 16;
 export const windowAttachPaddingPx = 12;
 export const verticalResistanceFactor = 0.22;
 export const verticalResistanceMaxPx = 30;
+export const reorderTriggerFraction = 0.1;
 
 export const applyVerticalResistance = (
   deltaY,

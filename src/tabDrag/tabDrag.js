@@ -180,12 +180,13 @@ export const initializeTabDrag = ({
     window.removeEventListener('pointercancel', onPointerUp);
   };
 
-  const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX }) => {
+  const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX, dragDirectionSign }) => {
     layoutPipeline.beginFrame();
     const moveResult = layoutPipeline.moveTabToPointerPosition({
       tabList,
       draggedTab,
-      pointerClientX
+      pointerClientX,
+      dragDirectionSign
     });
 
     if (moveResult.moved) {
@@ -447,7 +448,8 @@ export const initializeTabDrag = ({
     const moveResult = moveTabWithLayoutPipeline({
       tabList: dragState.currentTabList,
       draggedTab: dragState.draggedTab,
-      pointerClientX: clientX
+      pointerClientX: clientX,
+      dragDirectionSign: Math.sign(deltaX)
     });
 
     if (!dragState.dragProxy && moveResult.moved) {
