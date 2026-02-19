@@ -203,10 +203,15 @@ export const initializeTabDrag = ({
   let hasQueuedPointer = false;
   let sourceWindowRemovedDuringDetach = false;
 
+  const preventSelectStart = (event) => {
+    event.preventDefault();
+  };
+
   const clearGlobalListeners = () => {
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerUp);
+    window.removeEventListener('selectstart', preventSelectStart);
   };
 
   const moveTabWithLayoutPipeline = ({ tabList, draggedTab, pointerClientX, dragDirectionSign }) => {
@@ -854,6 +859,7 @@ export const initializeTabDrag = ({
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('selectstart', preventSelectStart);
   });
 
   return true;
