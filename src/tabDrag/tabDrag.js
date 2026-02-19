@@ -255,6 +255,19 @@ export const initializeTabDrag = ({
     };
   };
 
+  const lockToNaturalFlexWidth = (tab) => {
+    tab.style.flex = '';
+    tab.style.minWidth = '';
+    tab.style.maxWidth = '';
+
+    const widthPx = tab.getBoundingClientRect().width;
+    if (widthPx > 0) {
+      tab.style.flex = `0 0 ${widthPx}px`;
+      tab.style.minWidth = `${widthPx}px`;
+      tab.style.maxWidth = `${widthPx}px`;
+    }
+  };
+
   const commitDropAttach = ({ draggedTab, attachTargetTabList, pointerClientX }) => {
     placeholderManager.restoreDisplay(draggedTab);
 
@@ -263,7 +276,9 @@ export const initializeTabDrag = ({
       attachTargetTabList
     });
 
-    if (!didCommitPreviewDrop) {
+    if (didCommitPreviewDrop) {
+      lockToNaturalFlexWidth(draggedTab);
+    } else {
       moveTabWithLayoutPipeline({
         tabList: attachTargetTabList,
         draggedTab,
@@ -307,7 +322,21 @@ export const initializeTabDrag = ({
     }
 
     const cleanupVisualState = () => {
+      const tabList = completedState.draggedTab.parentNode;
+      const siblings = tabList
+        ? getTabs(tabList).filter((t) => t !== completedState.draggedTab)
+        : [];
+      const beforeLeftMap = new Map(siblings.map((t) => [t, t.getBoundingClientRect().left]));
+
       dragDomAdapter.cleanupVisualState(completedState);
+
+      const displacements = siblings
+        .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
+        .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
+      if (displacements.length > 0) {
+        animationCoordinator.animateSiblingDisplacement(displacements);
+      }
+
       if (completedState.draggedTab.classList.contains(activeTabClassName)) {
         const durationMs = scaleDurationMs(dragTransitionDurationMs);
         animateCornerClipIn(completedState.draggedTab, { durationMs });
