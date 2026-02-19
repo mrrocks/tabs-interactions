@@ -7,7 +7,8 @@ export const createDragDomAdapter = ({
   activeDragClassName,
   inactiveDragClassName,
   dragSourceClassName,
-  dragProxyClassName
+  dragProxyClassName,
+  noTransitionClassName
 }) => {
   const setElementTransform = (element, translateX, translateY) => {
     if (!element || !element.style) {
@@ -107,9 +108,10 @@ export const createDragDomAdapter = ({
 
   const restoreDraggedTabStyles = (dragState) => {
     const { draggedTab, initialInlineStyles } = dragState;
+    const isInactive = !draggedTab.classList.contains(activeTabClassName);
+    const hadProxy = Boolean(dragState.dragProxy);
 
-    draggedTab.classList.remove(dragSourceClassName);
-    draggedTab.classList.remove(dragClassName, activeDragClassName, inactiveDragClassName);
+    draggedTab.classList.remove(dragSourceClassName, dragClassName);
     draggedTab.style.transform = initialInlineStyles.transform;
     draggedTab.style.transition = initialInlineStyles.transition;
     draggedTab.style.flex = initialInlineStyles.flex;
@@ -117,6 +119,19 @@ export const createDragDomAdapter = ({
     draggedTab.style.maxWidth = initialInlineStyles.maxWidth;
     draggedTab.style.willChange = initialInlineStyles.willChange;
     draggedTab.style.zIndex = initialInlineStyles.zIndex;
+
+    if (hadProxy && isInactive) {
+      draggedTab.classList.add(noTransitionClassName, inactiveDragClassName);
+      draggedTab.getBoundingClientRect();
+      draggedTab.classList.remove(noTransitionClassName);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          draggedTab.classList.remove(inactiveDragClassName);
+        });
+      });
+    } else {
+      draggedTab.classList.remove(activeDragClassName, inactiveDragClassName);
+    }
   };
 
   const rebaseDragVisualAtPointer = (dragState, clientX, clientY) => {

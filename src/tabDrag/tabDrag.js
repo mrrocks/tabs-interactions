@@ -38,7 +38,12 @@ import {
 import { createHoverPreviewManager } from './hoverPreviewManager';
 import { createDetachPlaceholderManager } from './detachPlaceholder';
 import { createDragVisualWidthManager } from './dragVisualWidth';
-import { animateCornerClipIn, animateCornerClipOut, animateShapeRadiusToAttached, animateShapeRadiusToDetached } from './cornerClipAnimation';
+import {
+  animateCornerClipIn,
+  animateCornerClipOut,
+  animateShapeRadiusToAttached,
+  animateShapeRadiusToDetached
+} from './cornerClipAnimation';
 
 export {
   dragActivationDistancePx,
@@ -72,6 +77,7 @@ const activeDragClassName = 'tab--dragging-active';
 const inactiveDragClassName = 'tab--dragging-inactive';
 const dragSourceClassName = 'tab--drag-source';
 const dragProxyClassName = 'tab--drag-proxy';
+const noTransitionClassName = 'tab--no-transition';
 const dragHoverPreviewClassName = 'tab--drag-hover-preview';
 const bodyDraggingClassName = 'body--tab-dragging';
 const tabAddSelector = '.tab--add';
@@ -129,7 +135,8 @@ export const initializeTabDrag = ({
     activeDragClassName,
     inactiveDragClassName,
     dragSourceClassName,
-    dragProxyClassName
+    dragProxyClassName,
+    noTransitionClassName
   });
   const animationCoordinator = createAnimationCoordinator({
     scaleDurationMs,

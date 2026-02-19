@@ -357,6 +357,18 @@ body
       opacity: 1
       pointer-events: auto
 
+  &.tab--no-transition
+    transition: none
+
+    &::before
+      transition: none
+
+    .tab--label
+      transition: none
+
+    .tab--close
+      transition: none
+
   &:focus-visible
     outline: 2px solid #00000033
     outline-offset: -2px

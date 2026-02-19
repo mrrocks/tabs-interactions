@@ -48,26 +48,20 @@ export const animateCornerClipOut = (tab, { durationMs, easing = 'ease' } = {}) 
   ].filter(Boolean);
 };
 
-export const animateShapeRadiusToDetached = (tab, { durationMs, easing = 'ease' } = {}) => {
+const animateShapeRadius = (tab, from, to, { durationMs, easing = 'ease', fill = 'none' } = {}) => {
   const shape = resolveShape(tab);
   if (!shape) {
     return null;
   }
 
   return shape.animate(
-    [{ borderRadius: RADIUS_ATTACHED }, { borderRadius: RADIUS_DETACHED }],
-    { duration: durationMs, easing, fill: 'forwards' }
+    [{ borderRadius: from }, { borderRadius: to }],
+    { duration: durationMs, easing, fill }
   );
 };
 
-export const animateShapeRadiusToAttached = (tab, { durationMs, easing = 'ease' } = {}) => {
-  const shape = resolveShape(tab);
-  if (!shape) {
-    return null;
-  }
+export const animateShapeRadiusToDetached = (tab, options) =>
+  animateShapeRadius(tab, RADIUS_ATTACHED, RADIUS_DETACHED, { ...options, fill: 'forwards' });
 
-  return shape.animate(
-    [{ borderRadius: RADIUS_DETACHED }, { borderRadius: RADIUS_ATTACHED }],
-    { duration: durationMs, easing, fill: 'none' }
-  );
-};
+export const animateShapeRadiusToAttached = (tab, options) =>
+  animateShapeRadius(tab, RADIUS_DETACHED, RADIUS_ATTACHED, options);
