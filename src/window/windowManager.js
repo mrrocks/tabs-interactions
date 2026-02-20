@@ -75,9 +75,9 @@ export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, place
   onTabInserted?.();
 
   const tabCenterX = toFiniteNumber(tabOffsetInPanel.x, 0) + toFiniteNumber(tabScreenRect.width, 0) / 2;
-  const tabCenterY = toFiniteNumber(tabOffsetInPanel.y, 0) + toFiniteNumber(tabScreenRect.height, 0) / 2;
+  const tabBottomY = toFiniteNumber(tabOffsetInPanel.y, 0) + toFiniteNumber(tabScreenRect.height, 0);
   const originX = frame.width > 0 ? (tabCenterX / frame.width) * 100 : 50;
-  const originY = frame.height > 0 ? (tabCenterY / frame.height) * 100 : 0;
+  const originY = frame.height > 0 ? (tabBottomY / frame.height) * 100 : 0;
 
   panel.style.transformOrigin = `${originX}% ${originY}%`;
 
