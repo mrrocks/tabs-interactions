@@ -111,7 +111,7 @@
 
 - When rapidly switching active tabs, close button visibility is temporarily suppressed to prevent accidental clicks (flicker guard)
 
-## 15. Motion Control (Demo Tool)
+## 15. Motion Control
 
 - Global slowdown slider: scales all animation durations from 1x to 12x
 - For review and presentation purposes only — not a shipping feature
