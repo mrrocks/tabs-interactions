@@ -129,7 +129,7 @@
 | Shadow in             | 150ms    | ease                               |
 | Shadow out            | 50ms     | ease                               |
 | Corner clip           | 150ms    | ease                               |
-| Detach correction     | 150ms    | cubic-bezier(0.25, 0.1, 0.25, 1.0) |
+| Detach correction     | 150ms    | cubic-bezier(0.25, 0.1, 0.25, 1.0) Due to resistance calculation |
 | Window spawn/remove   | 250ms    | ease                               |
 | Pin/Unpin FLIP        | 150ms    | ease                               |
 | All hover transitions | 150ms    | ease                               |
