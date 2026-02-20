@@ -4,6 +4,7 @@ import { randomizeTabContent, setActiveTab, getTabs, tabSelector } from './tabs'
 import { animatedRemovePanel } from '../window/windowManager';
 import { isEventTargetElement } from '../shared/dom';
 import { observeTabCompression, unobserveTabCompression } from './tabCompression';
+import { isPinned } from './tabPinning';
 
 const addButtonSelector = '.tab--add';
 const closeButtonSelector = '.tab--close';
@@ -180,6 +181,7 @@ const addTab = (tabList) => {
 
 const closeTab = (tabList, tab) => {
   if (closingTabs.has(tab)) return;
+  if (isPinned(tab)) return;
 
   const tabs = getTabs(tabList);
 

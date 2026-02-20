@@ -468,6 +468,38 @@ body
   &.tab--narrow.tab--inactive:hover .tab--favicon
     opacity: 1
 
+  &.tab--pinned
+    flex: 0 0 var(--tab-min-width)
+    max-width: var(--tab-min-width)
+
+  &.tab--pinned .tab--close
+    display: none
+
+  &.tab--pinned.tab--narrow.tab--active:hover .tab--favicon
+    opacity: 1
+
+.tab-context-menu
+  position: fixed
+  z-index: 10000
+  min-width: 160px
+  padding: 4px 0
+  border-radius: 6px
+  background: #fff
+  border: 1px solid rgba(0, 0, 0, 0.12)
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08)
+  font-family: "SF Pro Text", "SF Pro", "Segoe UI", sans-serif
+  font-size: 13px
+  line-height: 1.2
+  user-select: none
+
+.tab-context-menu--item
+  padding: 6px 12px
+  cursor: default
+  color: rgba(0, 0, 0, 0.88)
+
+  &:hover
+    background: rgba(0, 0, 0, 0.06)
+
 .preload *
   transition: none !important
 

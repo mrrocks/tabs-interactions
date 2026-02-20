@@ -9,6 +9,7 @@ import {
 import { consumeDragCompleted } from './tabDragSignal';
 import { initializeTabLifecycle } from './tabCreation';
 import { observeTabCompression } from './tabCompression';
+import { initializeTabContextMenu } from './tabContextMenu';
 
 export const tabListSelector = '.tab--list';
 export const tabSelector = '.tab--item';
@@ -88,6 +89,7 @@ const closeSuppressedClassName = 'tab--close-suppressed';
 const narrowClassName = 'tab--narrow';
 
 const suppressCloseUntilLeave = (tab) => {
+  if (!tab.matches(':hover')) return;
   tab.classList.add(closeSuppressedClassName);
   tab.addEventListener('pointerleave', () => {
     tab.classList.remove(closeSuppressedClassName);
@@ -214,6 +216,7 @@ export const initializeTabList = (tabList) => {
   initializedTabLists.add(tabList);
   initializeTabListState(tabList);
   initializeTabLifecycle(tabList);
+  initializeTabContextMenu(tabList);
   tabList.addEventListener('click', (event) => {
     onTabListClick(tabList, event);
   });
