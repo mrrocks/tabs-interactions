@@ -14,6 +14,49 @@ export const tabSelector = '.tab--item';
 const closeButtonSelector = '.tab--close';
 const initializedTabLists = new WeakSet();
 
+const sampleTabContents = [
+  { domain: 'starbucks.com', label: 'Starbucks Coffee Company' },
+  { domain: 'google.com', label: 'Google' },
+  { domain: 'facebook.com', label: 'Facebook - Log In or Sign Up' },
+  { domain: 'bsky.app', label: 'Bluesky' },
+  { domain: 'netflix.com', label: 'Netflix' },
+  { domain: 'amazon.com', label: 'Amazon.com' },
+  { domain: 'reddit.com', label: 'Reddit - Dive into anything' },
+  { domain: 'wikipedia.org', label: 'Wikipedia, the free encyclopedia' },
+  { domain: 'youtube.com', label: 'YouTube' },
+  { domain: 'linkedin.com', label: 'LinkedIn: Log In or Sign Up' }
+];
+
+export const randomizeTabContent = (tab) => {
+  let usedLabels = new Set();
+
+  if (typeof document !== 'undefined') {
+    const allTabs = document.querySelectorAll(tabSelector);
+    allTabs.forEach((t) => {
+      if (t === tab) return;
+      const labelEl = t.querySelector('.tab--label');
+      if (labelEl && labelEl.textContent) {
+        usedLabels.add(labelEl.textContent);
+      }
+    });
+  }
+
+  const availableContents = sampleTabContents.filter((c) => !usedLabels.has(c.label));
+  const pool = availableContents.length > 0 ? availableContents : sampleTabContents;
+  const content = pool[Math.floor(Math.random() * pool.length)];
+
+  const faviconElement = tab.querySelector('.tab--favicon');
+  const labelElement = tab.querySelector('.tab--label');
+
+  if (faviconElement) {
+    faviconElement.textContent = '';
+    faviconElement.style.background = `url('https://www.google.com/s2/favicons?domain=${content.domain}&sz=128') center / contain no-repeat transparent`;
+  }
+  if (labelElement) {
+    labelElement.textContent = content.label;
+  }
+};
+
 export const getTabs = (tabList) => Array.from(tabList.querySelectorAll(tabSelector));
 
 export const getActiveTabIndex = (tabList) =>
@@ -51,6 +94,8 @@ const initializeTabListState = (tabList) => {
   if (tabs.length === 0) {
     return;
   }
+
+  tabs.forEach(randomizeTabContent);
 
   const initialActiveIndex = getInitialActiveIndex(
     tabs.map((tab) => tab.classList.contains(activeTabClassName))
