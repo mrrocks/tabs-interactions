@@ -8,6 +8,7 @@ export const resistanceFactor = 0.22;
 export const resistanceMaxPx = 32;
 export const resistanceOnsetInsetPx = 12;
 export const reorderTriggerFraction = 0.1;
+export const longPressActivationDelayMs = 300;
 
 export const applyResistance = (
   overshoot,

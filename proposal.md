@@ -1,1 +1,4 @@
 - Drag unactive tabs without focusing them
+- long press to trigger drag as well
+- active tabs and corner animations
+- creation/destroying

@@ -23,6 +23,7 @@ import { clearDragCompleted, signalDragCompleted } from '../tabs/tabDragSignal';
 import {
   dragActivationDistancePx,
   detachThresholdPx,
+  longPressActivationDelayMs,
   reentryPaddingPx,
   resistanceOnsetInsetPx,
   windowAttachPaddingPx,
@@ -198,6 +199,7 @@ export const initializeTabDrag = ({
 
   let dragState = null;
   let frameRequestId = 0;
+  let longPressTimerId = 0;
   let queuedClientX = 0;
   let queuedClientY = 0;
   let hasQueuedPointer = false;
@@ -207,7 +209,15 @@ export const initializeTabDrag = ({
     event.preventDefault();
   };
 
+  const clearLongPressTimer = () => {
+    if (longPressTimerId !== 0) {
+      clearTimeout(longPressTimerId);
+      longPressTimerId = 0;
+    }
+  };
+
   const clearGlobalListeners = () => {
+    clearLongPressTimer();
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', onPointerUp);
@@ -685,17 +695,12 @@ export const initializeTabDrag = ({
     return true;
   };
 
-  const startDragIfNeeded = (clientX, clientY) => {
+  const activateDrag = () => {
     if (!dragState || dragState.dragStarted) {
       return;
     }
 
-    const deltaX = clientX - dragState.startX;
-    const deltaY = clientY - dragState.startY;
-
-    if (Math.hypot(deltaX, deltaY) < dragActivationDistancePx) {
-      return;
-    }
+    clearLongPressTimer();
 
     const wasActive = dragState.draggedTab.classList.contains(activeTabClassName);
     dragState = markSessionAsActivated(dragState);
@@ -718,6 +723,21 @@ export const initializeTabDrag = ({
       document.body.style.userSelect = 'none';
       document.body.classList.add(bodyDraggingClassName);
     }
+  };
+
+  const startDragIfNeeded = (clientX, clientY) => {
+    if (!dragState || dragState.dragStarted) {
+      return;
+    }
+
+    const deltaX = clientX - dragState.startX;
+    const deltaY = clientY - dragState.startY;
+
+    if (Math.hypot(deltaX, deltaY) < dragActivationDistancePx) {
+      return;
+    }
+
+    activateDrag();
   };
 
   const applyDragSample = () => {
@@ -856,6 +876,7 @@ export const initializeTabDrag = ({
     hasQueuedPointer = true;
     sourceWindowRemovedDuringDetach = false;
     visualWidth.cancelAll();
+    longPressTimerId = setTimeout(activateDrag, scaleDurationMs(longPressActivationDelayMs));
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);

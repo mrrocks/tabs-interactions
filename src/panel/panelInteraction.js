@@ -235,7 +235,7 @@ export const initializePanelInteraction = (panel) => {
 
     if (
       event.target instanceof Element &&
-      (event.target.closest('.tab--item') || event.target.closest('.window--controls'))
+      (event.target.closest('.tab--item') || event.target.closest('.window--controls') || event.target.closest('.tab--add'))
     ) {
       return;
     }

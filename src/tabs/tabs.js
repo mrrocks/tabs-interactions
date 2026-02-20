@@ -7,6 +7,7 @@ import {
   inactiveTabClassName
 } from './tabState';
 import { consumeDragCompleted } from './tabDragSignal';
+import { initializeTabLifecycle } from './tabCreation';
 
 export const tabListSelector = '.tab--list';
 export const tabSelector = '.tab--item';
@@ -194,6 +195,7 @@ export const initializeTabList = (tabList) => {
 
   initializedTabLists.add(tabList);
   initializeTabListState(tabList);
+  initializeTabLifecycle(tabList);
   tabList.addEventListener('click', (event) => {
     onTabListClick(tabList, event);
   });

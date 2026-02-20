@@ -26,6 +26,11 @@
   inherits: true
   initial-value: 0px
 
+@property --creation-reveal-size
+  syntax: '<length>'
+  inherits: false
+  initial-value: 0px
+
 *
   box-sizing: border-box
 
@@ -364,6 +369,13 @@ body
 
     &::before
       transition: none
+
+    .tab--shape
+      transition: none
+
+      &::before,
+      &::after
+        transition: none
 
     .tab--label
       transition: none
