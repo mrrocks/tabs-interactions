@@ -4,8 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title></title>
+    <link rel="preload" as="image" href="https://www.starbucks.com/weblx/images/favicons/favicon-32x32.png" />
+    <link rel="preload" as="image" href="https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png" />
+    <link rel="preload" as="image" href="https://static.xx.fbcdn.net/rsrc.php/v3/y0/r/eFHSyHqJbYw.png" />
+    <link rel="preload" as="image" href="https://bsky.app/static/favicon-32x32.png" />
+    <link rel="preload" as="image" href="https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.png" />
+    <link rel="preload" as="image" href="https://www.amazon.com/favicon.ico" />
+    <link rel="preload" as="image" href="https://github.githubassets.com/favicons/favicon.png" />
+    <link rel="preload" as="image" href="https://www.nytimes.com/vi-assets/static-assets/apple-touch-icon-319373aaf4524d94d38aa599c56b8655.png" />
+    <link rel="preload" as="image" href="https://www.youtube.com/s/desktop/177093bc/img/favicon_144x144.png" />
+    <link rel="preload" as="image" href="https://static.licdn.com/aero-v1/sc/h/al2o9zrvru7aqj8e1x2rzsrca" />
+    <link rel="preload" as="image" href="https://duckduckgo.com/favicon.ico" />
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #1E1E1E;
+        opacity: 0;
+      }
+      body.loaded {
+        opacity: 1;
+      }
+    </style>
   </head>
-  <body>
+  <body class="preload">
     <div class="motion--control">
       <label class="motion--label" for="motion-slowdown-slider">Motion slowdown</label>
       <div class="motion--row">

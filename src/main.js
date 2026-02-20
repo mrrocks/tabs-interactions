@@ -15,3 +15,12 @@ initializeTabDrag({
   initializePanelInteraction,
   initializeTabList
 });
+
+window.addEventListener('load', () => {
+  document.body.classList.add('loaded');
+  
+  requestAnimationFrame(() => {
+    document.body.classList.remove('preload');
+  });
+});
+

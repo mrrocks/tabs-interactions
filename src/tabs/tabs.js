@@ -29,29 +29,24 @@ const sampleTabContents = [
 ];
 
 // Eagerly preload all images so they are immediately available from browser cache on reload
-if (typeof document !== 'undefined') {
-  sampleTabContents.forEach((content) => {
-    const link = document.createElement('link');
-    link.rel = 'preload';
-    link.as = 'image';
-    link.href = content.icon || `https://www.google.com/s2/favicons?domain=${content.domain}&sz=128`;
-    document.head.appendChild(link);
-  });
-}
+const getFallbackIconUrl = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+const getIconUrl = (content) => content.icon || getFallbackIconUrl(content.domain);
+
+const getUsedLabels = (excludeTab) => {
+  if (typeof document === 'undefined') {
+    return new Set();
+  }
+
+  return new Set(
+    Array.from(document.querySelectorAll(tabSelector))
+      .filter((t) => t !== excludeTab)
+      .map((t) => t.querySelector('.tab--label')?.textContent)
+      .filter((label) => label != null)
+  );
+};
 
 export const randomizeTabContent = (tab) => {
-  let usedLabels = new Set();
-
-  if (typeof document !== 'undefined') {
-    const allTabs = document.querySelectorAll(tabSelector);
-    allTabs.forEach((t) => {
-      if (t === tab) return;
-      const labelEl = t.querySelector('.tab--label');
-      if (labelEl && labelEl.textContent) {
-        usedLabels.add(labelEl.textContent);
-      }
-    });
-  }
+  const usedLabels = getUsedLabels(tab);
 
   const availableContents = sampleTabContents.filter((c) => !usedLabels.has(c.label));
   const pool = availableContents.length > 0 ? availableContents : sampleTabContents;
@@ -61,21 +56,22 @@ export const randomizeTabContent = (tab) => {
   const labelElement = tab.querySelector('.tab--label');
 
   if (faviconElement) {
+    const iconUrl = getIconUrl(content);
+    const setBackground = (url) => {
+      faviconElement.style.background = `url('${url}') center / contain no-repeat transparent`;
+    };
+
     faviconElement.textContent = '';
-    const iconUrl = content.icon || `https://www.google.com/s2/favicons?domain=${content.domain}&sz=128`;
-    // Fallback to the google s2 favicon service if the image fails to load
-    const img = new Image();
-    img.onload = () => {
-      faviconElement.style.background = `url('${iconUrl}') center / contain no-repeat transparent`;
-    };
-    img.onerror = () => {
-      faviconElement.style.background = `url('https://www.google.com/s2/favicons?domain=${content.domain}&sz=128') center / contain no-repeat transparent`;
-    };
-    img.src = iconUrl;
-    
-    // Apply immediately to avoid waiting for the image to load on fast networks
-    faviconElement.style.background = `url('${iconUrl}') center / contain no-repeat transparent`;
+    setBackground(iconUrl);
+
+    if (content.icon) {
+      const img = new Image();
+      img.onload = () => setBackground(iconUrl);
+      img.onerror = () => setBackground(getFallbackIconUrl(content.domain));
+      img.src = iconUrl;
+    }
   }
+
   if (labelElement) {
     labelElement.textContent = content.label;
   }
