@@ -213,7 +213,11 @@ export const createDetachedWindow = ({
   }
 
   const liveRect = sourcePanel.getBoundingClientRect();
-  const sourceRect = liveRect.width > 0 && liveRect.height > 0 ? liveRect : sourcePanelRect ?? liveRect;
+  const sourceRect = sourcePanelRect?.width > 0 && sourcePanelRect?.height > 0
+    ? sourcePanelRect
+    : liveRect.width > 0 && liveRect.height > 0
+      ? liveRect
+      : sourcePanelRect ?? liveRect;
   const { panel, tabList } = createDetachedPanelElements({ sourcePanel, sourceTabList });
   const panelWidth = sourceRect.width;
   const panelHeight = sourceRect.height;
