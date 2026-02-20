@@ -15,17 +15,29 @@ const closeButtonSelector = '.tab--close';
 const initializedTabLists = new WeakSet();
 
 const sampleTabContents = [
-  { domain: 'starbucks.com', label: 'Starbucks Coffee Company' },
-  { domain: 'google.com', label: 'Google' },
-  { domain: 'facebook.com', label: 'Facebook - Log In or Sign Up' },
-  { domain: 'bsky.app', label: 'Bluesky' },
-  { domain: 'netflix.com', label: 'Netflix' },
-  { domain: 'amazon.com', label: 'Amazon.com' },
-  { domain: 'reddit.com', label: 'Reddit - Dive into anything' },
-  { domain: 'wikipedia.org', label: 'Wikipedia, the free encyclopedia' },
-  { domain: 'youtube.com', label: 'YouTube' },
-  { domain: 'linkedin.com', label: 'LinkedIn: Log In or Sign Up' }
+  { domain: 'starbucks.com', label: 'Starbucks Coffee Company', icon: 'https://www.starbucks.com/weblx/images/favicons/favicon-32x32.png' },
+  { domain: 'google.com', label: 'Google', icon: 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png' },
+  { domain: 'facebook.com', label: 'Facebook - Log In or Sign Up', icon: 'https://static.xx.fbcdn.net/rsrc.php/v3/y0/r/eFHSyHqJbYw.png' },
+  { domain: 'bsky.app', label: 'Bluesky', icon: 'https://bsky.app/static/favicon-32x32.png' },
+  { domain: 'netflix.com', label: 'Netflix', icon: 'https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.png' },
+  { domain: 'amazon.com', label: 'Amazon.com', icon: 'https://www.amazon.com/favicon.ico' },
+  { domain: 'github.com', label: 'GitHub: Let\'s build from here', icon: 'https://github.githubassets.com/favicons/favicon.png' },
+  { domain: 'nytimes.com', label: 'The New York Times - Breaking News, US News, World News and Videos', icon: 'https://www.nytimes.com/vi-assets/static-assets/apple-touch-icon-319373aaf4524d94d38aa599c56b8655.png' },
+  { domain: 'youtube.com', label: 'YouTube', icon: 'https://www.youtube.com/s/desktop/177093bc/img/favicon_144x144.png' },
+  { domain: 'linkedin.com', label: 'LinkedIn: Log In or Sign Up', icon: 'https://static.licdn.com/aero-v1/sc/h/al2o9zrvru7aqj8e1x2rzsrca' },
+  { domain: 'duckduckgo.com', label: 'DuckDuckGo — Privacy, simplified.', icon: 'https://duckduckgo.com/favicon.ico' }
 ];
+
+// Eagerly preload all images so they are immediately available from browser cache on reload
+if (typeof document !== 'undefined') {
+  sampleTabContents.forEach((content) => {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = content.icon || `https://www.google.com/s2/favicons?domain=${content.domain}&sz=128`;
+    document.head.appendChild(link);
+  });
+}
 
 export const randomizeTabContent = (tab) => {
   let usedLabels = new Set();
@@ -50,7 +62,19 @@ export const randomizeTabContent = (tab) => {
 
   if (faviconElement) {
     faviconElement.textContent = '';
-    faviconElement.style.background = `url('https://www.google.com/s2/favicons?domain=${content.domain}&sz=128') center / contain no-repeat transparent`;
+    const iconUrl = content.icon || `https://www.google.com/s2/favicons?domain=${content.domain}&sz=128`;
+    // Fallback to the google s2 favicon service if the image fails to load
+    const img = new Image();
+    img.onload = () => {
+      faviconElement.style.background = `url('${iconUrl}') center / contain no-repeat transparent`;
+    };
+    img.onerror = () => {
+      faviconElement.style.background = `url('https://www.google.com/s2/favicons?domain=${content.domain}&sz=128') center / contain no-repeat transparent`;
+    };
+    img.src = iconUrl;
+    
+    // Apply immediately to avoid waiting for the image to load on fast networks
+    faviconElement.style.background = `url('${iconUrl}') center / contain no-repeat transparent`;
   }
   if (labelElement) {
     labelElement.textContent = content.label;
