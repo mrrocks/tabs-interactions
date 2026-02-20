@@ -53,6 +53,7 @@ import {
 import { animateDragShadowIn, animateDragShadowOut } from './dragShadowAnimation';
 import { createDetachTransitionManager } from './detachTransition';
 import { dragTransitionDurationMs, dragShadowOutDurationMs } from './dragAnimationConfig';
+import { isPinned, pinnedClassName } from '../tabs/tabPinning';
 
 export {
   dragActivationDistancePx,
@@ -168,11 +169,22 @@ export const initializeTabDrag = ({
     getProxySettleDelta,
     dragProxySettleDurationMs: dragTransitionDurationMs
   });
+  const constrainInsertionIndex = ({ index, draggedTab, siblingTabs }) => {
+    const pinnedBoundary = siblingTabs.findIndex((t) => !isPinned(t));
+    const pinnedCount = pinnedBoundary === -1 ? siblingTabs.length : pinnedBoundary;
+
+    if (isPinned(draggedTab)) {
+      return Math.min(index, pinnedCount);
+    }
+    return Math.max(index, pinnedCount);
+  };
+
   const layoutPipeline = createLayoutPipeline({
     getTabs,
     getInsertionIndexFromCenters,
     moveTabToList,
     onBeforeMeasure: animationCoordinator.cancelAllSiblingAnimations,
+    constrainInsertionIndex,
     tabAddSelector
   });
   const dropResolver = createDropResolver({
@@ -545,7 +557,7 @@ export const initializeTabDrag = ({
 
     if (!wasDetached && dragState.detachIntentActive) {
       detachTransition.activate({ overshootX, overshootY });
-      if (dragState.dragProxy) {
+      if (dragState.dragProxy && !isPinned(dragState.draggedTab)) {
         const panel = dragState.currentTabList?.closest?.('.browser');
         visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
       }
@@ -654,10 +666,10 @@ export const initializeTabDrag = ({
         hoverPreview.detach();
       }
 
-      if (dragState.detachIntentActive) {
+      if (dragState.detachIntentActive && !isPinned(dragState.draggedTab)) {
         const panel = sourceTabList?.closest?.('.browser');
         visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
-      } else {
+      } else if (!dragState.detachIntentActive) {
         visualWidth.reset(dragState);
       }
       return false;
@@ -671,6 +683,9 @@ export const initializeTabDrag = ({
       const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
       const placeholderWidthPx = replacingPlaceholder ? placeholderManager.targetWidthPx() : 0;
       hoverPreview.createAndAttach(attachTarget);
+      if (isPinned(dragState.draggedTab)) {
+        hoverPreview.previewTab.classList.add(pinnedClassName);
+      }
       if (replacingPlaceholder) {
         placeholderManager.replaceWith(hoverPreview.previewTab);
       }

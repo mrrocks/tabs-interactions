@@ -1,7 +1,7 @@
 import { scaleDurationMs } from '../motion/motionSpeed';
 import { getTabs, tabSelector } from './tabs';
 
-const pinnedClassName = 'tab--pinned';
+export const pinnedClassName = 'tab--pinned';
 const addButtonSelector = '.tab--add';
 const animationDurationMs = 150;
 const animationEasing = 'ease';

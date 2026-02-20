@@ -9,6 +9,7 @@ export const createLayoutPipeline = ({
   getInsertionIndexFromCenters,
   moveTabToList,
   onBeforeMeasure,
+  constrainInsertionIndex,
   tabAddSelector = '.tab--add'
 }) => {
   let measurementCache = new Map();
@@ -47,7 +48,10 @@ export const createLayoutPipeline = ({
       const rect = measureRect(tab);
       return rect.left + rect.width * triggerFraction;
     });
-    const targetIndex = getInsertionIndexFromCenters({ centers: thresholds, pointerClientX });
+    const rawTargetIndex = getInsertionIndexFromCenters({ centers: thresholds, pointerClientX });
+    const targetIndex = typeof constrainInsertionIndex === 'function'
+      ? constrainInsertionIndex({ index: rawTargetIndex, draggedTab, siblingTabs })
+      : rawTargetIndex;
     const currentTabs = getTabs(tabList);
     const currentIndex = currentTabs.indexOf(draggedTab);
 
