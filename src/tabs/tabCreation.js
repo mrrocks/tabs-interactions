@@ -39,6 +39,9 @@ const createTabElement = () => {
   const background = document.createElement('span');
   background.className = 'tab--background';
   background.setAttribute('aria-hidden', 'true');
+  background.innerHTML =
+    '<svg class="tab--corner tab--corner-left" width="12" height="12" viewBox="0 0 12 12"><path d="M0 12h12V0C12 6.627 6.627 12 0 12Z" fill="currentColor"/></svg>' +
+    '<svg class="tab--corner tab--corner-right" width="12" height="12" viewBox="0 0 12 12"><path d="M12 12H0V0C0 6.627 5.373 12 12 12Z" fill="currentColor"/></svg>';
 
   const wrapper = createContentWrapper();
 

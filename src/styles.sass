@@ -267,25 +267,23 @@ body
     z-index: 0
     transition: opacity var(--motion-transition-standard), transform var(--motion-transition-standard)
 
-    &::before,
-    &::after
-      content: ''
+    .tab--corner
       position: absolute
       bottom: 0
       width: 12px
       height: 12px
+      color: var(--bg-surface)
       pointer-events: none
+      opacity: 0
       transition: transform var(--motion-transition-standard), opacity var(--motion-transition-standard)
 
-    &::before
+    .tab--corner-left
       left: -12px
       transform: translateX(12px)
-      background: radial-gradient(circle at top left, transparent 12px, var(--bg-surface) 12px)
 
-    &::after
+    .tab--corner-right
       right: -12px
       transform: translateX(-12px)
-      background: radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px)
 
   > :not(.tab--background)
     position: relative
@@ -309,8 +307,7 @@ body
       opacity: 1
       transform: translateY(0) scale(1)
 
-      &::before,
-      &::after
+      .tab--corner
         opacity: 1
         transform: translateX(0)
 
@@ -326,12 +323,14 @@ body
     .tab--background
       transition: none
 
-      &::before
+      .tab--corner
         opacity: 0
+        transition: none
+
+      .tab--corner-left
         transform: translateX(12px)
 
-      &::after
-        opacity: 0
+      .tab--corner-right
         transform: translateX(-12px)
 
     .tab--close
@@ -373,8 +372,7 @@ body
     .tab--background
       transition: none
 
-      &::before,
-      &::after
+      .tab--corner
         transition: none
 
     .tab--favicon

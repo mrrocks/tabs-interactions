@@ -42,12 +42,20 @@
 - On drop, proxy settles to final position (150ms ease)
 - Pointer events disabled on non-dragged elements during drag
 
-## 6. Drag Visual Effects
-- **Corner clip**: tab background corner pseudo-elements slide in/out (12px translation) on drag start/end
-- **Shadow**: box-shadow fades in on drag start (150ms), fades out on drop (100ms)
-- **Background radius**: corners morph between attached (rounded-top) and detached (fully rounded) states
+## 6. Outer Corners (Inverse Rounding)
+- The active tab has **outer corners** — 12×12px inverse rounded shapes that sit at the bottom-left and bottom-right, outside the tab background
+- These create the visual effect of the tab bar surface curving up into the tab (like browser tabs in Chrome/Arc)
+- Rendered as radial-gradient cutouts: a circle is cut from a filled square, leaving only the concave curve
+- **Default state**: hidden — translated inward (tucked behind the tab) with opacity 0
+- **Active tab**: visible — translated to natural position with opacity 1, transition 150ms ease
+- **Drag start**: outer corners animate out (slide inward + fade out, 150ms) so the tab looks like a standalone card
+- **Drop / reattach**: outer corners animate back in (slide outward + fade in, 150ms)
 
-## 7. Tab Detach (Tear-off)
+## 7. Drag Visual Effects
+- **Shadow**: box-shadow fades in on drag start (150ms), fades out on drop (100ms)
+- **Background radius**: corners morph between attached (`12px 12px 0 0` — top-rounded only) and detached (`12px` — fully rounded) states
+
+## 8. Tab Detach (Tear-off)
 - Dragging a tab beyond the tab bar boundary triggers detach
 - **Boundary resistance**: cubic-bezier resistance curve as the tab approaches the edge — it doesn't just pop off, it resists first
 - **Overshoot detection**: measures drag intent beyond the resistance zone to confirm detach
@@ -55,41 +63,41 @@
 - **Placeholder collapse**: the gap left behind animates closed
 - **New window creation**: a new window spawns at the tab's anchor point with scale 0.6→1.0 + opacity 0→1 (180ms)
 
-## 8. Cross-Window Drag (Attach)
+## 9. Cross-Window Drag (Attach)
 - Dragging a tab over another window's tab bar creates a hover preview (width expands from 0)
 - Hovered window comes to front (z-order)
 - Proxy width syncs to match the preview slot
 - Dropping attaches the tab at the calculated insertion index
 - Leaving the target window collapses the preview and the tab returns to detached state
 
-## 9. Pin / Unpin
+## 10. Pin / Unpin
 - Available via context menu (right-click / secondary click)
 - **Pin**: tab moves to the pinned section with a FLIP animation
   - Width shrinks to icon-only minimum
   - All affected tabs reposition via translate (150ms)
 - **Unpin**: reverses — width restores, tab moves back to unpinned section
 
-## 10. Context Menu
+## 11. Context Menu
 - Right-click / secondary click on a tab shows a context menu
 - Options: Pin / Unpin
 - Dismisses on outside click or Escape
 
-## 11. Tab Compression
+## 12. Tab Compression
 - As tabs shrink (overflow), tabs reaching ≤60px width enter narrow mode
 - Narrow mode: close button hidden to preserve label readability
 - Close button reappears on hover even in narrow mode (for active/hovered tab)
 
-## 12. Window Chrome
+## 13. Window Chrome
 - **Title bar drag**: drag window by non-interactive header areas
 - **8-direction resize**: edge and corner hit zones (10px padding), with appropriate cursors
 - **Minimum size constraints** enforced during resize
 - **Window close button**: triggers scale 1.0→0.6 + opacity out (180ms)
 - **Empty window auto-close**: removing the last tab animates the window away
 
-## 13. Close Suppression
+## 14. Close Suppression
 - When rapidly switching active tabs, close button visibility is temporarily suppressed to prevent accidental clicks (flicker guard)
 
-## 14. Motion Control (Demo Tool)
+## 15. Motion Control (Demo Tool)
 - Global slowdown slider: scales all animation durations from 1x to 12x
 - For review and presentation purposes only — not a shipping feature
 
