@@ -127,10 +127,10 @@
 | Sibling displacement  | 150ms    | ease                               |
 | Drag proxy settle     | 150ms    | ease                               |
 | Shadow in             | 150ms    | ease                               |
-| Shadow out            | 100ms    | ease                               |
+| Shadow out            | 150ms    | ease                               |
 | Corner clip           | 150ms    | ease                               |
 | Detach correction     | 150ms    | cubic-bezier(0.25, 0.1, 0.25, 1.0) |
-| Window spawn/remove   | 180ms    | ease                               |
+| Window spawn/remove   | 250ms    | ease                               |
 | Pin/Unpin FLIP        | 150ms    | ease                               |
 | All hover transitions | 150ms    | ease                               |
 

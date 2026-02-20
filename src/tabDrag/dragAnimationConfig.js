@@ -1,5 +1,5 @@
 export const dragTransitionDurationMs = 150;
-export const dragShadowOutDurationMs = 100;
+export const dragShadowOutDurationMs = 150;
 export const dragTransitionEasing = 'ease';
 
 const sampleAxis = (p1, p2, t) => {

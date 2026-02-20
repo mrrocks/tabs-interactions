@@ -21,7 +21,7 @@ export const removePanel = (panel) => {
   return false;
 };
 
-const panelScaleTransitionMs = 180;
+const panelScaleTransitionMs = 250;
 const panelDetachScale = 0.6;
 
 export const computeFrameFromTabAnchor = ({
