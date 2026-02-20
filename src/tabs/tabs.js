@@ -8,6 +8,7 @@ import {
 } from './tabState';
 import { consumeDragCompleted } from './tabDragSignal';
 import { initializeTabLifecycle } from './tabCreation';
+import { observeTabCompression } from './tabCompression';
 
 export const tabListSelector = '.tab--list';
 export const tabSelector = '.tab--item';
@@ -83,6 +84,16 @@ export const getTabs = (tabList) => Array.from(tabList.querySelectorAll(tabSelec
 export const getActiveTabIndex = (tabList) =>
   getTabs(tabList).findIndex((tab) => tab.classList.contains(activeTabClassName));
 
+const closeSuppressedClassName = 'tab--close-suppressed';
+const narrowClassName = 'tab--narrow';
+
+const suppressCloseUntilLeave = (tab) => {
+  tab.classList.add(closeSuppressedClassName);
+  tab.addEventListener('pointerleave', () => {
+    tab.classList.remove(closeSuppressedClassName);
+  }, { once: true });
+};
+
 export const setActiveTab = (tabList, tabIndex, shouldFocus = false) => {
   const tabs = getTabs(tabList);
 
@@ -95,12 +106,16 @@ export const setActiveTab = (tabList, tabIndex, shouldFocus = false) => {
 
   tabs.forEach((tab, index) => {
     const state = nextState[index];
+    const wasInactive = tab.classList.contains(inactiveTabClassName);
     tab.classList.remove(activeTabClassName, inactiveTabClassName);
     tab.classList.add(state.stateClassName);
     tab.setAttribute('aria-selected', state.selected ? 'true' : 'false');
     tab.tabIndex = state.tabIndex;
     if (state.selected) {
       activeTab = tab;
+      if (wasInactive && tab.classList.contains(narrowClassName)) {
+        suppressCloseUntilLeave(tab);
+      }
     }
   });
 
@@ -116,7 +131,10 @@ const initializeTabListState = (tabList) => {
     return;
   }
 
-  tabs.forEach(randomizeTabContent);
+  tabs.forEach((tab) => {
+    randomizeTabContent(tab);
+    observeTabCompression(tab);
+  });
 
   const initialActiveIndex = getInitialActiveIndex(
     tabs.map((tab) => tab.classList.contains(activeTabClassName))

@@ -3,6 +3,7 @@ import { activeTabClassName, inactiveTabClassName } from './tabState';
 import { randomizeTabContent, setActiveTab, getTabs, tabSelector } from './tabs';
 import { animatedRemovePanel } from '../window/windowManager';
 import { isEventTargetElement } from '../shared/dom';
+import { observeTabCompression, unobserveTabCompression } from './tabCompression';
 
 const addButtonSelector = '.tab--add';
 const closeButtonSelector = '.tab--close';
@@ -122,6 +123,7 @@ const addTab = (tabList) => {
   const { tab, wrapper } = createTabElement();
   tabList.insertBefore(tab, addButton);
   randomizeTabContent(tab);
+  observeTabCompression(tab);
   constrainToZero(tab);
 
   tab.classList.add(noTransitionClassName);
@@ -243,6 +245,7 @@ const closeTab = (tabList, tab) => {
   }
 
   widthAnim.addEventListener('finish', () => {
+    unobserveTabCompression(tab);
     tab.remove();
     closingTabs.delete(tab);
   });

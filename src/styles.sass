@@ -79,7 +79,7 @@ body
   --panel-min-width: 120px
   --panel-min-height: 80px
   --tab-default-width: 244px
-  --tab-min-width: 140px
+  --tab-min-width: 44px
   --window-drop-shadow: 0 20px 48px rgba(0, 0, 0, 0.2), 0 8px 20px rgba(0, 0, 0, 0.1)
 
   position: fixed
@@ -377,6 +377,9 @@ body
       &::after
         transition: none
 
+    .tab--favicon
+      transition: none
+
     .tab--label
       transition: none
 
@@ -395,6 +398,7 @@ body
     background: transparent
     display: block
     user-select: none
+    transition: opacity var(--motion-transition-standard)
 
   .tab--label
     flex: 1 1 auto
@@ -423,7 +427,7 @@ body
     opacity: 0
     pointer-events: none
     cursor: pointer
-    transition: opacity var(--motion-transition-standard), color var(--motion-transition-standard), background-color var(--motion-transition-standard)
+    transition: opacity var(--motion-transition-standard), color var(--motion-transition-standard), background-color var(--motion-transition-standard), right var(--motion-transition-standard)
 
     &::before
       content: ''
@@ -444,6 +448,25 @@ body
   &.tab--inactive:hover .tab--close
     opacity: 1
     pointer-events: auto
+
+  &.tab--narrow.tab--active .tab--close
+    opacity: 0
+    pointer-events: none
+    right: 12px
+
+  &.tab--narrow.tab--active:hover:not(.tab--close-suppressed) .tab--close
+    opacity: 1
+    pointer-events: auto
+
+  &.tab--narrow.tab--active:hover:not(.tab--close-suppressed) .tab--favicon
+    opacity: 0
+
+  &.tab--narrow.tab--inactive:hover .tab--close
+    opacity: 0
+    pointer-events: none
+
+  &.tab--narrow.tab--inactive:hover .tab--favicon
+    opacity: 1
 
 .preload *
   transition: none !important
