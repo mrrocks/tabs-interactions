@@ -36,9 +36,9 @@ const createTabElement = () => {
   tab.setAttribute('aria-selected', 'false');
   tab.tabIndex = -1;
 
-  const shape = document.createElement('span');
-  shape.className = 'tab--shape';
-  shape.setAttribute('aria-hidden', 'true');
+  const background = document.createElement('span');
+  background.className = 'tab--background';
+  background.setAttribute('aria-hidden', 'true');
 
   const wrapper = createContentWrapper();
 
@@ -56,7 +56,7 @@ const createTabElement = () => {
   close.type = 'button';
   close.setAttribute('aria-label', 'Close tab');
 
-  tab.append(shape, wrapper, close);
+  tab.append(background, wrapper, close);
   return { tab, wrapper };
 };
 
@@ -158,8 +158,8 @@ const addTab = (tabList) => {
     fill: 'forwards'
   });
 
-  const shape = tab.querySelector('.tab--shape');
-  shape.animate([
+  const bg = tab.querySelector('.tab--background');
+  bg.animate([
     { opacity: 0 },
     { opacity: 1 }
   ], { duration, easing: animationEasing });
@@ -231,8 +231,8 @@ const closeTab = (tabList, tab) => {
   });
 
   if (wasActive) {
-    const shape = tab.querySelector('.tab--shape');
-    shape.animate([
+    const bg = tab.querySelector('.tab--background');
+    bg.animate([
       { opacity: 1 },
       { opacity: 0 }
     ], { duration, easing: animationEasing, fill: 'forwards' });

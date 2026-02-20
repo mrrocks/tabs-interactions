@@ -2,7 +2,7 @@ import { dragTransitionEasing } from './dragAnimationConfig';
 
 const SHADOW_NONE = '0 0 0 rgba(0, 0, 0, 0), 0 0 0 rgba(0, 0, 0, 0)';
 const SHADOW_DRAG = '0 4px 12px rgba(0, 0, 0, 0.06), 0 0px 2px rgba(0, 0, 0, 0.02)';
-const SHAPE_SELECTOR = '.tab--shape';
+const BACKGROUND_SELECTOR = '.tab--background';
 
 const resolveTarget = (element, isActive) => {
   if (!element) {
@@ -10,11 +10,11 @@ const resolveTarget = (element, isActive) => {
   }
 
   if (isActive) {
-    const shape = typeof element.querySelector === 'function'
-      ? element.querySelector(SHAPE_SELECTOR)
+    const bg = typeof element.querySelector === 'function'
+      ? element.querySelector(BACKGROUND_SELECTOR)
       : null;
-    return shape && typeof shape.animate === 'function'
-      ? { target: shape }
+    return bg && typeof bg.animate === 'function'
+      ? { target: bg }
       : null;
   }
 

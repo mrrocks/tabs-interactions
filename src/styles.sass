@@ -252,7 +252,7 @@ body
     z-index: 0
     transition: opacity var(--motion-transition-standard)
 
-  .tab--shape
+  .tab--background
     position: absolute
     top: 0
     right: 0
@@ -287,7 +287,7 @@ body
       transform: translateX(-12px)
       background: radial-gradient(circle at top right, transparent 12px, var(--bg-surface) 12px)
 
-  > :not(.tab--shape)
+  > :not(.tab--background)
     position: relative
     z-index: 1
 
@@ -305,7 +305,7 @@ body
     --label-close-button-gap: 20px
     --label-fade-width: 40px
 
-    .tab--shape
+    .tab--background
       opacity: 1
       transform: translateY(0) scale(1)
 
@@ -323,7 +323,7 @@ body
     &::before
       transition: none
 
-    .tab--shape
+    .tab--background
       transition: none
 
       &::before
@@ -342,7 +342,7 @@ body
     --label-close-button-gap: 20px
     --label-fade-width: 40px
 
-    .tab--shape
+    .tab--background
       opacity: 1
       transform: translateY(0) scale(1)
       border-radius: 12px
@@ -370,7 +370,7 @@ body
     &::before
       transition: none
 
-    .tab--shape
+    .tab--background
       transition: none
 
       &::before,

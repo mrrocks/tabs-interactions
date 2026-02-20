@@ -6,64 +6,64 @@ const TRANSLATE_HIDDEN_AFTER = `translateX(-${CORNER_WIDTH_PX}px)`;
 const TRANSLATE_VISIBLE = 'translateX(0)';
 const RADIUS_ATTACHED = '12px 12px 0 0';
 const RADIUS_DETACHED = '12px';
-const SHAPE_SELECTOR = '.tab--shape';
+const BACKGROUND_SELECTOR = '.tab--background';
 
-const resolveShape = (tab) => {
+const resolveBackground = (tab) => {
   if (!tab || typeof tab.querySelector !== 'function') {
     return null;
   }
-  const shape = tab.querySelector(SHAPE_SELECTOR);
-  return shape && typeof shape.animate === 'function' ? shape : null;
+  const bg = tab.querySelector(BACKGROUND_SELECTOR);
+  return bg && typeof bg.animate === 'function' ? bg : null;
 };
 
-const animatePseudo = (shape, pseudo, keyframes, options) => {
+const animatePseudo = (bg, pseudo, keyframes, options) => {
   try {
-    return shape.animate(keyframes, { ...options, pseudoElement: pseudo });
+    return bg.animate(keyframes, { ...options, pseudoElement: pseudo });
   } catch {
     return null;
   }
 };
 
 export const animateCornerClipIn = (tab, { durationMs, easing = dragTransitionEasing, fill = 'none' } = {}) => {
-  const shape = resolveShape(tab);
-  if (!shape) {
+  const bg = resolveBackground(tab);
+  if (!bg) {
     return [];
   }
 
   const options = { duration: durationMs, easing, fill };
   return [
-    animatePseudo(shape, '::before', [{ transform: TRANSLATE_HIDDEN_BEFORE, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options),
-    animatePseudo(shape, '::after', [{ transform: TRANSLATE_HIDDEN_AFTER, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options)
+    animatePseudo(bg, '::before', [{ transform: TRANSLATE_HIDDEN_BEFORE, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options),
+    animatePseudo(bg, '::after', [{ transform: TRANSLATE_HIDDEN_AFTER, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options)
   ].filter(Boolean);
 };
 
 export const animateCornerClipOut = (tab, { durationMs, easing = dragTransitionEasing } = {}) => {
-  const shape = resolveShape(tab);
-  if (!shape) {
+  const bg = resolveBackground(tab);
+  if (!bg) {
     return [];
   }
 
   const options = { duration: durationMs, easing, fill: 'forwards' };
   return [
-    animatePseudo(shape, '::before', [{ transform: TRANSLATE_VISIBLE, opacity: 1 }, { transform: TRANSLATE_HIDDEN_BEFORE, opacity: 0 }], options),
-    animatePseudo(shape, '::after', [{ transform: TRANSLATE_VISIBLE, opacity: 1 }, { transform: TRANSLATE_HIDDEN_AFTER, opacity: 0 }], options)
+    animatePseudo(bg, '::before', [{ transform: TRANSLATE_VISIBLE, opacity: 1 }, { transform: TRANSLATE_HIDDEN_BEFORE, opacity: 0 }], options),
+    animatePseudo(bg, '::after', [{ transform: TRANSLATE_VISIBLE, opacity: 1 }, { transform: TRANSLATE_HIDDEN_AFTER, opacity: 0 }], options)
   ].filter(Boolean);
 };
 
-const animateShapeRadius = (tab, from, to, { durationMs, easing = dragTransitionEasing, fill = 'none' } = {}) => {
-  const shape = resolveShape(tab);
-  if (!shape) {
+const animateBackgroundRadius = (tab, from, to, { durationMs, easing = dragTransitionEasing, fill = 'none' } = {}) => {
+  const bg = resolveBackground(tab);
+  if (!bg) {
     return null;
   }
 
-  return shape.animate(
+  return bg.animate(
     [{ borderRadius: from }, { borderRadius: to }],
     { duration: durationMs, easing, fill }
   );
 };
 
-export const animateShapeRadiusToDetached = (tab, options) =>
-  animateShapeRadius(tab, RADIUS_ATTACHED, RADIUS_DETACHED, { ...options, fill: 'forwards' });
+export const animateBackgroundRadiusToDetached = (tab, options) =>
+  animateBackgroundRadius(tab, RADIUS_ATTACHED, RADIUS_DETACHED, { ...options, fill: 'forwards' });
 
-export const animateShapeRadiusToAttached = (tab, options) =>
-  animateShapeRadius(tab, RADIUS_DETACHED, RADIUS_ATTACHED, options);
+export const animateBackgroundRadiusToAttached = (tab, options) =>
+  animateBackgroundRadius(tab, RADIUS_DETACHED, RADIUS_ATTACHED, options);

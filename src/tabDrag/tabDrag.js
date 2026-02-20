@@ -47,8 +47,8 @@ import { createDragVisualWidthManager } from './dragVisualWidth';
 import {
   animateCornerClipIn,
   animateCornerClipOut,
-  animateShapeRadiusToAttached,
-  animateShapeRadiusToDetached
+  animateBackgroundRadiusToAttached,
+  animateBackgroundRadiusToDetached
 } from './cornerClipAnimation';
 import { animateDragShadowIn, animateDragShadowOut } from './dragShadowAnimation';
 import { createDetachTransitionManager } from './detachTransition';
@@ -367,7 +367,7 @@ export const initializeTabDrag = ({
       if (completedState.draggedTab.classList.contains(activeTabClassName)) {
         const durationMs = scaleDurationMs(dragTransitionDurationMs);
         animateCornerClipIn(completedState.draggedTab, { durationMs });
-        animateShapeRadiusToAttached(completedState.draggedTab, { durationMs });
+        animateBackgroundRadiusToAttached(completedState.draggedTab, { durationMs });
       }
     };
 
@@ -479,7 +479,7 @@ export const initializeTabDrag = ({
               }
               const durationMs = scaleDurationMs(dragTransitionDurationMs);
               animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
-              animateShapeRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
+              animateBackgroundRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
               animateDragShadowOut(proxy, {
                 durationMs: scaleDurationMs(dragShadowOutDurationMs),
                 isActive: true
@@ -724,7 +724,7 @@ export const initializeTabDrag = ({
     if (wasActive && dragState.dragProxy) {
       const durationMs = scaleDurationMs(dragTransitionDurationMs);
       animateCornerClipOut(dragState.dragProxy, { durationMs });
-      animateShapeRadiusToDetached(dragState.dragProxy, { durationMs });
+      animateBackgroundRadiusToDetached(dragState.dragProxy, { durationMs });
     }
 
     if (dragState.dragProxy) {

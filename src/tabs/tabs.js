@@ -1,7 +1,6 @@
 import { isEventTargetElement } from '../shared/dom';
 import {
   activeTabClassName,
-  getArrowTargetIndex,
   getInitialActiveIndex,
   getTabActivationState,
   inactiveTabClassName
@@ -173,41 +172,6 @@ const onTabListClick = (tabList, event) => {
   setActiveTab(tabList, tabIndex);
 };
 
-const onTabListKeyDown = (tabList, event) => {
-  if (!isEventTargetElement(event.target)) {
-    return;
-  }
-
-  const tab = event.target.closest(tabSelector);
-
-  if (!tab || !tabList.contains(tab)) {
-    return;
-  }
-
-  const tabsList = getTabs(tabList);
-  const tabIndex = tabsList.indexOf(tab);
-
-  if (tabIndex === -1) {
-    return;
-  }
-
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    event.preventDefault();
-    const nextIndex = getArrowTargetIndex({
-      currentIndex: tabIndex,
-      key: event.key,
-      tabCount: tabsList.length
-    });
-    setActiveTab(tabList, nextIndex, true);
-    return;
-  }
-
-  if (event.key === ' ' || event.key === 'Enter') {
-    event.preventDefault();
-    setActiveTab(tabList, tabIndex, true);
-  }
-};
-
 export const initializeTabList = (tabList) => {
   if (!tabList || initializedTabLists.has(tabList)) {
     return false;
@@ -219,10 +183,6 @@ export const initializeTabList = (tabList) => {
   initializeTabContextMenu(tabList);
   tabList.addEventListener('click', (event) => {
     onTabListClick(tabList, event);
-  });
-
-  tabList.addEventListener('keydown', (event) => {
-    onTabListKeyDown(tabList, event);
   });
 
   return true;

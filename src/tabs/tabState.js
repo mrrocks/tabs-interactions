@@ -37,20 +37,3 @@ export const getTabActivationState = (tabCount, activeIndex) => {
   });
 };
 
-export const getArrowTargetIndex = ({ currentIndex, key, tabCount }) => {
-  if (tabCount <= 0) {
-    return -1;
-  }
-
-  const resolvedIndex = clampIndex(currentIndex, tabCount);
-
-  if (key === 'ArrowLeft') {
-    return resolvedIndex === 0 ? tabCount - 1 : resolvedIndex - 1;
-  }
-
-  if (key === 'ArrowRight') {
-    return resolvedIndex === tabCount - 1 ? 0 : resolvedIndex + 1;
-  }
-
-  return resolvedIndex;
-};
