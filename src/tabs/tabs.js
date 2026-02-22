@@ -30,9 +30,16 @@ const sampleTabContents = [
   { domain: 'duckduckgo.com', label: 'DuckDuckGo — Privacy, simplified.', icon: 'https://duckduckgo.com/favicon.ico' }
 ];
 
-// Eagerly preload all images so they are immediately available from browser cache on reload
 const getFallbackIconUrl = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
 const getIconUrl = (content) => content.icon || getFallbackIconUrl(content.domain);
+
+// Eagerly preload all images so they are immediately available from browser cache on reload
+if (typeof Image !== 'undefined') {
+  sampleTabContents.forEach((content) => {
+    const img = new Image();
+    img.src = getIconUrl(content);
+  });
+}
 
 const getUsedLabels = (excludeTab) => {
   if (typeof document === 'undefined') {
