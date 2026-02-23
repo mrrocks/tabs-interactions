@@ -1,7 +1,7 @@
 import { scaleDurationMs } from '../motion/motionSpeed';
 import { tabAddSelector, tabCloseSelector, panelSelector } from '../shared/selectors';
 import { activeTabClassName, inactiveTabClassName } from './tabState';
-import { randomizeTabContent, setActiveTab, getTabs, tabSelector } from './tabs';
+import { randomizeTabContent, setActiveTab, getTabs, getActiveTabIndex, tabSelector } from './tabs';
 import { animatedRemovePanel } from '../window/windowManager';
 import { isEventTargetElement } from '../shared/dom';
 import { observeTabCompression, unobserveTabCompression } from './tabCompression';
@@ -117,20 +117,7 @@ const clearMask = (el) => {
   el.style.removeProperty('--creation-reveal-size');
 };
 
-const addTab = (tabList) => {
-  const addButton = tabList.querySelector(tabAddSelector);
-  if (!addButton) return;
-
-  const { tab, wrapper } = createTabElement();
-  tabList.insertBefore(tab, addButton);
-  randomizeTabContent(tab);
-  observeTabCompression(tab);
-  constrainToZero(tab);
-
-  tab.classList.add(noTransitionClassName);
-  const tabs = getTabs(tabList);
-  setActiveTab(tabList, tabs.indexOf(tab));
-
+const animateTabOpen = (tab, wrapper) => {
   const { tabWidth, paddingLeft, paddingRight } = measureNaturalWidth(tab);
   if (tabWidth <= 0) {
     releaseSizeConstraints(tab);
@@ -177,6 +164,34 @@ const addTab = (tabList) => {
     closeAnim?.cancel();
     widthAnim.cancel();
   });
+};
+
+const addTab = (tabList) => {
+  const addButton = tabList.querySelector(tabAddSelector);
+  if (!addButton) return;
+
+  const { tab, wrapper } = createTabElement();
+
+  const currentTabs = getTabs(tabList);
+  const activeIndex = getActiveTabIndex(tabList);
+  const insertBeforeNode = activeIndex >= 0 && activeIndex < currentTabs.length - 1
+    ? currentTabs[activeIndex + 1]
+    : addButton;
+  tabList.insertBefore(tab, insertBeforeNode);
+
+  const faviconReady = randomizeTabContent(tab);
+  observeTabCompression(tab);
+  constrainToZero(tab);
+
+  tab.classList.add(noTransitionClassName);
+  const tabs = getTabs(tabList);
+  setActiveTab(tabList, tabs.indexOf(tab));
+
+  if (faviconReady) {
+    faviconReady.then(() => animateTabOpen(tab, wrapper));
+  } else {
+    animateTabOpen(tab, wrapper);
+  }
 };
 
 const closeTab = (tabList, tab) => {

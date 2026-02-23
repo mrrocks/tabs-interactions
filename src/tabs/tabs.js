@@ -32,11 +32,13 @@ const sampleTabContents = [
 const getFallbackIconUrl = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
 const getIconUrl = (content) => content.icon || getFallbackIconUrl(content.domain);
 
-// Eagerly preload all images so they are immediately available from browser cache on reload
+const preloadedImages = new Map();
+
 if (typeof Image !== 'undefined') {
   sampleTabContents.forEach((content) => {
     const img = new Image();
     img.src = getIconUrl(content);
+    preloadedImages.set(img.src, img);
   });
 }
 
@@ -53,6 +55,33 @@ const getUsedLabels = (excludeTab) => {
   );
 };
 
+const setFaviconBackground = (faviconElement, url) => {
+  faviconElement.style.background = `url('${url}') center / contain no-repeat transparent`;
+};
+
+const ensureDecoded = (url) => {
+  const cached = preloadedImages.get(url);
+  if (cached?.complete && cached.naturalWidth > 0) return Promise.resolve(url);
+
+  const img = new Image();
+  img.src = url;
+  if (img.complete && img.naturalWidth > 0) return Promise.resolve(url);
+
+  return img.decode().then(() => url);
+};
+
+const loadFavicon = (faviconElement, iconUrl, fallbackUrl) => {
+  faviconElement.textContent = '';
+
+  return ensureDecoded(iconUrl)
+    .catch(() => fallbackUrl && fallbackUrl !== iconUrl
+      ? ensureDecoded(fallbackUrl)
+      : iconUrl
+    )
+    .catch(() => iconUrl)
+    .then((url) => setFaviconBackground(faviconElement, url));
+};
+
 export const randomizeTabContent = (tab) => {
   const usedLabels = getUsedLabels(tab);
 
@@ -63,26 +92,18 @@ export const randomizeTabContent = (tab) => {
   const faviconElement = tab.querySelector('.tab--favicon');
   const labelElement = tab.querySelector('.tab--label');
 
+  let ready;
   if (faviconElement) {
     const iconUrl = getIconUrl(content);
-    const setBackground = (url) => {
-      faviconElement.style.background = `url('${url}') center / contain no-repeat transparent`;
-    };
-
-    faviconElement.textContent = '';
-    setBackground(iconUrl);
-
-    if (content.icon) {
-      const img = new Image();
-      img.onload = () => setBackground(iconUrl);
-      img.onerror = () => setBackground(getFallbackIconUrl(content.domain));
-      img.src = iconUrl;
-    }
+    const fallbackUrl = content.icon ? getFallbackIconUrl(content.domain) : null;
+    ready = loadFavicon(faviconElement, iconUrl, fallbackUrl);
   }
 
   if (labelElement) {
     labelElement.textContent = content.label;
   }
+
+  return ready;
 };
 
 export const getTabs = (tabList) => Array.from(tabList.querySelectorAll(tabSelector));
