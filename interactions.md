@@ -1,10 +1,12 @@
 # Tab Interactions — Native App Spec
 
+**Prototype**: https://tabs-interactions.vercel.app/
+
 ## Try in the prototype
 
 1. Click between tabs to see the activation animation (background rises + outer corners slide out)
 2. Add a new tab, watch the multi-phase width + content reveal
-3. Close a tab, watch the collapse + mask + background fade
+3. Close a tab (both active and inactive), watch the collapse + mask + background fade
 4. Hover inactive tabs, background and close button fade in
 5. Drag a tab to reorder, siblings displace smoothly
 6. Try long pressing a tab to activate the drag state without moving
@@ -17,9 +19,12 @@
 13. Add many tabs until they compress, close button hides at ≤60px
 14. Close the last tab in a window, the window scales down and disappears
 15. Drag a window by its title bar, resize from edges and corners
-16. Use the slowdown slider to review any animation at up to 12x
+16. Toggle "New tab creation" between "Next to active" and "At the end", then add tabs to see the difference
+17. Use the slowdown slider to review any animation at up to 12x
 
 ---
+
+## Doc/Spec
 
 ## 1. Tab Activation
 
@@ -39,8 +44,14 @@
 
 ## 2. Tab Creation
 
-- Add button appends a new tab, which auto-activates immediately
+- Add button creates a new tab, which auto-activates immediately
 - Tab is inserted at zero width and zero padding, then animates open
+
+**Insertion position** (configurable via demo toggle):
+- **Next to active** (default): new tab is inserted immediately after the currently active tab
+- **At the end**: new tab is appended at the end of the tab list (before the add button)
+
+**Favicon loading**: the entrance animation is deferred until the tab's favicon has been decoded and is ready to render, preventing a flash of empty icon space.
 
 **Multi-phase entrance animation** (total duration: 250ms, easing: ease):
 
@@ -258,7 +269,13 @@ Available via context menu (right-click / secondary click).
 
 - Global slowdown slider scales all animation durations from `1x` to `12x`
 - All animations in the prototype respect this multiplier
-- For review and presentation purposes only — not a shipping feature
+
+## 16. Tab Creation Position (Demo Tool)
+
+- Toggle switches between **Next to active** and **At the end**
+- Controls where newly created tabs are inserted (see section 2)
+
+Both demo tools are for review and presentation purposes only — not shipping features.
 
 ---
 
