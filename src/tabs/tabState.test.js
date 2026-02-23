@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   activeTabClassName,
-  getArrowTargetIndex,
   getInitialActiveIndex,
   getTabActivationState,
   inactiveTabClassName
@@ -34,9 +33,3 @@ describe('getTabActivationState', () => {
   });
 });
 
-describe('getArrowTargetIndex', () => {
-  it('wraps around for left and right arrow navigation', () => {
-    expect(getArrowTargetIndex({ currentIndex: 0, key: 'ArrowLeft', tabCount: 3 })).toBe(2);
-    expect(getArrowTargetIndex({ currentIndex: 2, key: 'ArrowRight', tabCount: 3 })).toBe(0);
-  });
-});

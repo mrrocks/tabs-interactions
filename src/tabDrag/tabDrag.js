@@ -1,5 +1,6 @@
-import { isEventTargetElement } from '../shared/dom';
+import { isEventTargetElement, toRectSnapshot } from '../shared/dom';
 import { scaleDurationMs } from '../motion/motionSpeed';
+import { panelSelector, tabAddSelector, tabCloseSelector } from '../shared/selectors';
 import { activeTabClassName } from '../tabs/tabState';
 import { getTabs, setActiveTab, tabListSelector, tabSelector } from '../tabs/tabs';
 import {
@@ -55,31 +56,6 @@ import { createDetachTransitionManager } from './detachTransition';
 import { dragTransitionDurationMs, dragShadowOutDurationMs } from './dragAnimationConfig';
 import { isPinned, pinnedClassName } from '../tabs/tabPinning';
 
-export {
-  dragActivationDistancePx,
-  detachThresholdPx,
-  reentryPaddingPx,
-  resistanceFactor,
-  resistanceMaxPx,
-  resistanceOnsetInsetPx,
-  windowAttachPaddingPx,
-  applyResistance,
-  computeOvershoot,
-  shouldDetachFromOvershoot,
-  getInsertionIndexFromCenters,
-  getProxySettleDelta,
-  resolveDetachIntent,
-  resolveDropAttachTarget,
-  resolveDropDetachIntent,
-  resolveDragVisualOffsetX,
-  resolveDragVisualOffsetY,
-  resolveHoverPreviewWidthPx,
-  resolveSourceActivationIndexAfterDetach,
-  shouldCloseSourcePanelAfterTransfer,
-  shouldDetachOnDrop,
-  shouldRemoveSourceWindowOnDetach
-} from './dragCalculations';
-
 const dragClassName = 'tab--dragging';
 const activeDragClassName = 'tab--dragging-active';
 const inactiveDragClassName = 'tab--dragging-inactive';
@@ -88,8 +64,6 @@ const dragProxyClassName = 'tab--drag-proxy';
 const noTransitionClassName = 'tab--no-transition';
 const dragHoverPreviewClassName = 'tab--drag-hover-preview';
 const bodyDraggingClassName = 'body--tab-dragging';
-const tabAddSelector = '.tab--add';
-const closeButtonSelector = '.tab--close';
 const initializedRoots = new WeakSet();
 
 const getDetachReferenceRect = (tabList) => {
@@ -97,7 +71,7 @@ const getDetachReferenceRect = (tabList) => {
     return null;
   }
 
-  const panel = tabList.closest('.browser');
+  const panel = tabList.closest(panelSelector);
   if (!panel) {
     return null;
   }
@@ -375,7 +349,7 @@ export const initializeTabDrag = ({
       const settleAnimation = animationCoordinator.animateProxySettleToTarget({
         dragProxy: completedState.dragProxy,
         draggedTab: completedState.draggedTab,
-        toRectSnapshot: dragDomAdapter.toRectSnapshot,
+        toRectSnapshot: toRectSnapshot,
         setDragProxyBaseRect: (rect) => {
           dragDomAdapter.setDragProxyBaseRect(completedState, rect);
         },
@@ -387,7 +361,7 @@ export const initializeTabDrag = ({
 
     const sourceTabList = completedState.currentTabList;
     const sourcePanel =
-      sourceTabList && typeof sourceTabList.closest === 'function' ? sourceTabList.closest('.browser') : null;
+      sourceTabList && typeof sourceTabList.closest === 'function' ? sourceTabList.closest(panelSelector) : null;
     const sourceReattachActive = completedState.detachIntentActive && hoverPreview.previewTabList === sourceTabList;
     const resolvedAttachTargetTabList = dropResolver.resolveAttachTargetTabList({
       clientX: completedState.lastClientX,
@@ -435,7 +409,7 @@ export const initializeTabDrag = ({
       }
       activateInSource?.();
     } else if (dropDestination === 'detach' && sourceTabList && sourcePanel) {
-      const tabScreenRect = dragDomAdapter.toRectSnapshot(
+      const tabScreenRect = toRectSnapshot(
         (completedState.dragProxy ?? completedState.draggedTab).getBoundingClientRect()
       );
       const activateInSource = captureSourceActivation(completedState.draggedTab, sourceTabList);
@@ -558,7 +532,7 @@ export const initializeTabDrag = ({
     if (!wasDetached && dragState.detachIntentActive) {
       detachTransition.activate({ overshootX, overshootY });
       if (dragState.dragProxy && !isPinned(dragState.draggedTab)) {
-        const panel = dragState.currentTabList?.closest?.('.browser');
+        const panel = dragState.currentTabList?.closest?.(panelSelector);
         visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
       }
     }
@@ -569,11 +543,11 @@ export const initializeTabDrag = ({
       if (dragState.detachIntentActive && isLastTab && !sourceWindowRemovedDuringDetach) {
         const sourcePanel =
           dragState.currentTabList && typeof dragState.currentTabList.closest === 'function'
-            ? dragState.currentTabList.closest('.browser')
+            ? dragState.currentTabList.closest(panelSelector)
             : null;
 
         if (sourcePanel) {
-          dragState.sourcePanelRect = dragDomAdapter.toRectSnapshot(sourcePanel.getBoundingClientRect());
+          dragState.sourcePanelRect = toRectSnapshot(sourcePanel.getBoundingClientRect());
           if (animatedRemovePanel(sourcePanel)) {
             sourceWindowRemovedDuringDetach = true;
           }
@@ -667,7 +641,7 @@ export const initializeTabDrag = ({
       }
 
       if (dragState.detachIntentActive && !isPinned(dragState.draggedTab)) {
-        const panel = sourceTabList?.closest?.('.browser');
+        const panel = sourceTabList?.closest?.(panelSelector);
         visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
       } else if (!dragState.detachIntentActive) {
         visualWidth.reset(dragState);
@@ -676,7 +650,7 @@ export const initializeTabDrag = ({
     }
 
     if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
-      const targetPanel = attachTarget.closest?.('.browser');
+      const targetPanel = attachTarget.closest?.(panelSelector);
       if (targetPanel) {
         bringToFront(targetPanel);
       }
@@ -837,7 +811,7 @@ export const initializeTabDrag = ({
       return;
     }
 
-    if (event.target.closest(closeButtonSelector)) {
+    if (event.target.closest(tabCloseSelector)) {
       return;
     }
 
@@ -851,7 +825,7 @@ export const initializeTabDrag = ({
       return;
     }
 
-    const sourcePanel = draggedTab.closest('.browser');
+    const sourcePanel = draggedTab.closest(panelSelector);
     if (!sourcePanel) {
       return;
     }

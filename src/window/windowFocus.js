@@ -1,4 +1,6 @@
-const panelSelector = '.browser';
+import { panelSelector } from '../shared/selectors';
+
+const initializedRoots = new WeakSet();
 let topZIndex = 0;
 let topPanel = null;
 
@@ -15,6 +17,12 @@ export const bringToFront = (panel) => {
 };
 
 export const initializeWindowFocus = (root = document) => {
+  if (!root || initializedRoots.has(root)) {
+    return;
+  }
+
+  initializedRoots.add(root);
+
   for (const panel of root.querySelectorAll(panelSelector)) {
     bringToFront(panel);
   }

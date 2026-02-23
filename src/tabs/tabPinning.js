@@ -1,14 +1,14 @@
 import { scaleDurationMs } from '../motion/motionSpeed';
+import { tabAddSelector } from '../shared/selectors';
 import { getTabs, tabSelector } from './tabs';
 
 export const pinnedClassName = 'tab--pinned';
-const addButtonSelector = '.tab--add';
 const animationDurationMs = 150;
 const animationEasing = 'ease';
 
 export const isPinned = (tab) => tab.classList.contains(pinnedClassName);
 
-const getAddButton = (tabList) => tabList.querySelector(addButtonSelector);
+const getAddButton = (tabList) => tabList.querySelector(tabAddSelector);
 
 const getPinnedBoundaryRef = (tabList, excludeTab) => {
   const tabs = Array.from(tabList.querySelectorAll(tabSelector));

@@ -1,3 +1,5 @@
+import { panelSelector as defaultPanelSelector, tabRowSelector as defaultTabRowSelector } from '../shared/selectors';
+
 const canUseElementInstance = () => typeof Element !== 'undefined';
 
 const isElementLike = (value) =>
@@ -27,8 +29,8 @@ export const isPointInsideRect = ({ clientX, clientY, rect, padding = 0 }) => {
 export const createDropResolver = ({
   tabListSelector,
   defaultAttachPaddingPx,
-  panelSelector = '.browser',
-  panelRowSelector = '.tab--row'
+  panelSelector = defaultPanelSelector,
+  panelRowSelector = defaultTabRowSelector
 }) => {
   const isPointInsidePanelRow = (tabList, clientX, clientY, padding) => {
     if (!tabList || typeof tabList.closest !== 'function') {

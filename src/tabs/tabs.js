@@ -1,4 +1,5 @@
 import { isEventTargetElement } from '../shared/dom';
+import { tabListSelector, tabItemSelector, tabCloseSelector } from '../shared/selectors';
 import {
   activeTabClassName,
   getInitialActiveIndex,
@@ -10,10 +11,8 @@ import { initializeTabLifecycle } from './tabCreation';
 import { observeTabCompression } from './tabCompression';
 import { initializeTabContextMenu } from './tabContextMenu';
 
-export const tabListSelector = '.tab--list';
-export const tabSelector = '.tab--item';
-
-const closeButtonSelector = '.tab--close';
+export { tabListSelector };
+export const tabSelector = tabItemSelector;
 const initializedTabLists = new WeakSet();
 
 const sampleTabContents = [
@@ -160,7 +159,7 @@ const onTabListClick = (tabList, event) => {
     return;
   }
 
-  if (event.target.closest(closeButtonSelector)) {
+  if (event.target.closest(tabCloseSelector)) {
     return;
   }
 
@@ -196,20 +195,11 @@ export const initializeTabList = (tabList) => {
 };
 
 const queryTabLists = (root) => {
-  if (!root) {
+  if (!root || typeof root.querySelectorAll !== 'function') {
     return [];
   }
 
-  if (typeof root.querySelectorAll === 'function') {
-    return Array.from(root.querySelectorAll(tabListSelector));
-  }
-
-  if (typeof root.querySelector === 'function') {
-    const tabList = root.querySelector(tabListSelector);
-    return tabList ? [tabList] : [];
-  }
-
-  return [];
+  return Array.from(root.querySelectorAll(tabListSelector));
 };
 
 export const initializeTabs = (root = document) => {

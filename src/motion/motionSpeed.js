@@ -1,4 +1,4 @@
-import { clamp } from '../shared/math';
+import { clamp, toFiniteNumber } from '../shared/math';
 
 export const motionSlowdownCssVariableName = '--motion-slowdown-factor';
 export const defaultMotionSlowdownFactor = 1;
@@ -12,15 +12,10 @@ export const motionSlowdownRange = Object.freeze({
 const motionSliderSelector = '[data-motion-slider]';
 const motionValueSelector = '[data-motion-value]';
 
-const toFiniteNumber = (value) => {
-  const parsedValue = Number.parseFloat(String(value).trim());
-  return Number.isFinite(parsedValue) ? parsedValue : null;
-};
-
 export const normalizeMotionSlowdownFactor = (value) => {
-  const parsedValue = toFiniteNumber(value);
+  const parsedValue = toFiniteNumber(value, NaN);
 
-  if (parsedValue === null) {
+  if (!Number.isFinite(parsedValue)) {
     return defaultMotionSlowdownFactor;
   }
 
@@ -83,12 +78,20 @@ const syncSliderAccessibility = (sliderElement, factor) => {
   sliderElement.setAttribute('aria-valuenow', factor.toFixed(1));
 };
 
+let motionControlInitialized = false;
+
 export const initializeMotionSlowdownControl = () => {
+  if (motionControlInitialized) {
+    return;
+  }
+
   const rootElement = getRootElement();
 
   if (!rootElement || typeof document === 'undefined') {
     return;
   }
+
+  motionControlInitialized = true;
 
   const sliderElement = document.querySelector(motionSliderSelector);
   const valueElement = document.querySelector(motionValueSelector);

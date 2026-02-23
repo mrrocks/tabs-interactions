@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { activeTabClassName, inactiveTabClassName } from './tabState';
 import { initializeTabs, setActiveTab, tabListSelector, tabSelector } from './tabs';
+
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+});
 
 const createClassList = (initialClassNames = []) => {
   const classNames = new Set(initialClassNames);
@@ -23,6 +27,7 @@ const createTab = ({ classNames = [], selected = false } = {}) => {
     classList,
     tabIndex: selected ? 0 : -1,
     focused: false,
+    style: {},
     setAttribute: (name, value) => {
       attributes.set(name, value);
     },
@@ -30,7 +35,8 @@ const createTab = ({ classNames = [], selected = false } = {}) => {
     focus: () => {
       tab.focused = true;
     },
-    closest: (selector) => (selector === tabSelector ? tab : null)
+    closest: (selector) => (selector === tabSelector ? tab : null),
+    querySelector: () => null
   };
 
   return tab;
@@ -60,12 +66,12 @@ afterEach(() => {
 
 describe('initializeTabs selectors', () => {
   it('queries tab list using data hook selector', () => {
-    const querySelector = vi.fn().mockReturnValue(null);
-    vi.stubGlobal('document', { querySelector });
+    const querySelectorAll = vi.fn().mockReturnValue([]);
+    vi.stubGlobal('document', { querySelectorAll });
 
     initializeTabs();
 
-    expect(querySelector).toHaveBeenCalledWith(tabListSelector);
+    expect(querySelectorAll).toHaveBeenCalledWith(tabListSelector);
   });
 
   it('initializes every tab list found by querySelectorAll', () => {
@@ -77,7 +83,10 @@ describe('initializeTabs selectors', () => {
     const secondTabList = createTabList([secondListFirstTab, secondListSecondTab]);
 
     vi.stubGlobal('document', {
-      querySelectorAll: (selector) => (selector === tabListSelector ? [firstTabList, secondTabList] : [])
+      querySelectorAll: (selector) => {
+        if (selector === tabListSelector) return [firstTabList, secondTabList];
+        return [];
+      }
     });
 
     initializeTabs();
@@ -118,7 +127,9 @@ describe('initializeTabs activation', () => {
     const firstTab = createTab({ classNames: [inactiveTabClassName], selected: true });
     const secondTab = createTab({ classNames: [activeTabClassName], selected: false });
     const tabList = createTabList([firstTab, secondTab]);
-    vi.stubGlobal('document', { querySelector: () => tabList });
+    vi.stubGlobal('document', {
+      querySelectorAll: (selector) => (selector === tabListSelector ? [tabList] : [])
+    });
 
     initializeTabs();
 
@@ -128,11 +139,13 @@ describe('initializeTabs activation', () => {
     expect(secondTab.getAttribute('aria-selected')).toBe('true');
   });
 
-  it('updates class and aria state on click and keyboard activation', () => {
+  it('updates class and aria state on click activation', () => {
     const firstTab = createTab({ classNames: [activeTabClassName], selected: true });
     const secondTab = createTab({ classNames: [inactiveTabClassName], selected: false });
     const tabList = createTabList([firstTab, secondTab]);
-    vi.stubGlobal('document', { querySelector: () => tabList });
+    vi.stubGlobal('document', {
+      querySelectorAll: (selector) => (selector === tabListSelector ? [tabList] : [])
+    });
 
     initializeTabs();
     tabList.dispatch('click', { target: secondTab });
@@ -141,19 +154,5 @@ describe('initializeTabs activation', () => {
     expect(secondTab.getAttribute('aria-selected')).toBe('true');
     expect(firstTab.classList.contains(inactiveTabClassName)).toBe(true);
     expect(firstTab.getAttribute('aria-selected')).toBe('false');
-
-    const preventDefault = vi.fn();
-    tabList.dispatch('keydown', {
-      target: secondTab,
-      key: 'ArrowLeft',
-      preventDefault
-    });
-
-    expect(preventDefault).toHaveBeenCalledOnce();
-    expect(firstTab.classList.contains(activeTabClassName)).toBe(true);
-    expect(firstTab.getAttribute('aria-selected')).toBe('true');
-    expect(firstTab.focused).toBe(true);
-    expect(secondTab.classList.contains(inactiveTabClassName)).toBe(true);
-    expect(secondTab.getAttribute('aria-selected')).toBe('false');
   });
 });

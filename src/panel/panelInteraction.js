@@ -5,6 +5,7 @@ import {
   getResizedFrame
 } from './panelResize';
 import { computePanelMinWidth } from './panelMinWidth';
+import { tabItemSelector, tabAddSelector, windowControlsSelector } from '../shared/selectors';
 
 const resizeHitArea = 10;
 const grabCursor = 'grab';
@@ -235,7 +236,7 @@ export const initializePanelInteraction = (panel) => {
 
     if (
       event.target instanceof Element &&
-      (event.target.closest('.tab--item') || event.target.closest('.window--controls') || event.target.closest('.tab--add'))
+      (event.target.closest(tabItemSelector) || event.target.closest(windowControlsSelector) || event.target.closest(tabAddSelector))
     ) {
       return;
     }
@@ -281,20 +282,11 @@ export const initializePanelInteraction = (panel) => {
 };
 
 const queryPanels = (root) => {
-  if (!root) {
+  if (!root || typeof root.querySelectorAll !== 'function') {
     return [];
   }
 
-  if (typeof root.querySelectorAll === 'function') {
-    return Array.from(root.querySelectorAll(panelSelector));
-  }
-
-  if (typeof root.querySelector === 'function') {
-    const panel = root.querySelector(panelSelector);
-    return panel ? [panel] : [];
-  }
-
-  return [];
+  return Array.from(root.querySelectorAll(panelSelector));
 };
 
 export const initializePanelInteractions = (root = document) => {

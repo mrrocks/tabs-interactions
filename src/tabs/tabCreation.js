@@ -1,14 +1,11 @@
 import { scaleDurationMs } from '../motion/motionSpeed';
+import { tabAddSelector, tabCloseSelector, panelSelector } from '../shared/selectors';
 import { activeTabClassName, inactiveTabClassName } from './tabState';
 import { randomizeTabContent, setActiveTab, getTabs, tabSelector } from './tabs';
 import { animatedRemovePanel } from '../window/windowManager';
 import { isEventTargetElement } from '../shared/dom';
 import { observeTabCompression, unobserveTabCompression } from './tabCompression';
 import { isPinned } from './tabPinning';
-
-const addButtonSelector = '.tab--add';
-const closeButtonSelector = '.tab--close';
-const panelSelector = '.browser';
 const noTransitionClassName = 'tab--no-transition';
 const baseDurationMs = 250;
 const animationEasing = 'ease';
@@ -73,7 +70,7 @@ const ensureContentWrapper = (tab) => {
 
   const wrapper = createContentWrapper();
   const label = tab.querySelector('.tab--label');
-  const close = tab.querySelector(closeButtonSelector);
+  const close = tab.querySelector(tabCloseSelector);
 
   if (favicon) wrapper.appendChild(favicon);
   if (label) wrapper.appendChild(label);
@@ -121,7 +118,7 @@ const clearMask = (el) => {
 };
 
 const addTab = (tabList) => {
-  const addButton = tabList.querySelector(addButtonSelector);
+  const addButton = tabList.querySelector(tabAddSelector);
   if (!addButton) return;
 
   const { tab, wrapper } = createTabElement();
@@ -167,7 +164,7 @@ const addTab = (tabList) => {
     { opacity: 1 }
   ], { duration, easing: animationEasing });
 
-  const closeBtn = tab.querySelector(closeButtonSelector);
+  const closeBtn = tab.querySelector(tabCloseSelector);
   const closeAnim = closeBtn?.animate([
     { opacity: 0, transform: 'translateY(-50%) scale(0.8)' },
     { opacity: 1, transform: 'translateY(-50%) scale(1)' }
@@ -191,7 +188,7 @@ const closeTab = (tabList, tab) => {
   if (tabs.length <= 1) {
     const panel = tabList.closest(panelSelector);
     if (panel) {
-      animatedRemovePanel(panel, { anchor: tab.querySelector(closeButtonSelector) });
+      animatedRemovePanel(panel, { anchor: tab.querySelector(tabCloseSelector) });
     }
     return;
   }
@@ -241,7 +238,7 @@ const closeTab = (tabList, tab) => {
     ], { duration, easing: animationEasing, fill: 'forwards' });
   }
 
-  const closeBtn = tab.querySelector(closeButtonSelector);
+  const closeBtn = tab.querySelector(tabCloseSelector);
   if (closeBtn) {
     closeBtn.animate([
       { opacity: 1, transform: 'translateY(-50%) scale(1)' },
@@ -260,12 +257,12 @@ export const initializeTabLifecycle = (tabList) => {
   tabList.addEventListener('click', (event) => {
     if (!isEventTargetElement(event.target)) return;
 
-    if (event.target.closest(addButtonSelector)) {
+    if (event.target.closest(tabAddSelector)) {
       addTab(tabList);
       return;
     }
 
-    const closeButton = event.target.closest(closeButtonSelector);
+    const closeButton = event.target.closest(tabCloseSelector);
     if (!closeButton) return;
 
     const tab = closeButton.closest(tabSelector);

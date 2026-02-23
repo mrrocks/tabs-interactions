@@ -1,9 +1,9 @@
 import { isEventTargetElement } from '../shared/dom';
+import { panelSelector, windowControlsSelector } from '../shared/selectors';
 import { animatedRemovePanel } from './windowManager';
 
+export { windowControlsSelector };
 export const closeWindowControlSelector = '[data-window-control="close"]';
-export const windowControlsSelector = '.window--controls';
-const windowPanelSelector = '.browser';
 const initializedRoots = new WeakSet();
 
 export const createWindowControlsElement = (documentRef = document) => {
@@ -46,7 +46,7 @@ export const initializeWindowControls = (root = document) => {
       return;
     }
 
-    const panel = closeControl.closest(windowPanelSelector);
+    const panel = closeControl.closest(panelSelector);
     if (!panel) {
       return;
     }

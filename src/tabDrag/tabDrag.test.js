@@ -19,7 +19,7 @@ import {
   shouldDetachOnDrop,
   shouldRemoveSourceWindowOnDetach,
   windowAttachPaddingPx
-} from './tabDrag';
+} from './dragCalculations';
 
 describe('getInsertionIndexFromCenters', () => {
   it('returns insertion index by crossing sibling centers', () => {

@@ -1,5 +1,6 @@
 import { toFiniteNumber } from '../shared/math';
 import { scaleDurationMs } from '../motion/motionSpeed';
+import { tabAddSelector, tabItemSelector, tabListSelector, tabRowSelector } from '../shared/selectors';
 import { createWindowControlsElement, windowControlsSelector } from './windowControls';
 import { bringToFront } from './windowFocus';
 
@@ -104,7 +105,7 @@ const createDetachedPanelElements = ({ sourcePanel, sourceTabList }) => {
   const tabRow = document.createElement('div');
   tabRow.className = 'tab--row';
 
-  const sourceTabRow = sourcePanel.querySelector('.tab--row');
+  const sourceTabRow = sourcePanel.querySelector(tabRowSelector);
   const controls = sourceTabRow ? sourceTabRow.querySelector(windowControlsSelector) : null;
   tabRow.append(controls ? controls.cloneNode(true) : createWindowControlsElement(document));
 
@@ -117,7 +118,7 @@ const createDetachedPanelElements = ({ sourcePanel, sourceTabList }) => {
   }
   tabRow.append(tabList);
 
-  const sourceAddButton = sourceTabList.querySelector('.tab--add');
+  const sourceAddButton = sourceTabList.querySelector(tabAddSelector);
   if (sourceAddButton) {
     tabList.append(sourceAddButton.cloneNode(true));
   }
@@ -132,7 +133,7 @@ const createDetachedPanelElements = ({ sourcePanel, sourceTabList }) => {
   return { panel, tabList };
 };
 
-const getTabEndReference = (tabList) => tabList.querySelector('.tab--add') ?? null;
+const getTabEndReference = (tabList) => tabList.querySelector(tabAddSelector) ?? null;
 
 const createTabPlaceholder = (tabList, { width, height }) => {
   const el = document.createElement('div');
@@ -149,10 +150,10 @@ export const moveTabToList = ({ tab, tabList, beforeNode = getTabEndReference(ta
   tabList.insertBefore(tab, beforeNode);
 };
 
-export const getTabCount = (tabList) => tabList.querySelectorAll('.tab--item').length;
+export const getTabCount = (tabList) => tabList.querySelectorAll(tabItemSelector).length;
 
 export const removeDetachedWindowIfEmpty = (panel) => {
-  const tabList = panel.querySelector('.tab--list');
+  const tabList = panel.querySelector(tabListSelector);
   if (!tabList) {
     return false;
   }

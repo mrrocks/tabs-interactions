@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { shouldCloseSourcePanelAfterTransfer } from './tabDrag';
+import { shouldCloseSourcePanelAfterTransfer } from './dragCalculations';
 import { initializeTabDrag } from './tabDrag';
 import { createLayoutPipeline } from './layoutPipeline';
 import { createDropResolver } from './dropResolver';

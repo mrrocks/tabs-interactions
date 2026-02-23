@@ -1,5 +1,6 @@
 import { toFiniteNumber } from '../shared/math';
 import { toRectSnapshot } from '../shared/dom';
+import { tabAddSelector as defaultTabAddSelector } from '../shared/selectors';
 import { reorderTriggerFraction } from './dragCalculations';
 
 const getSiblingTabs = (getTabs, tabList, draggedTab) => getTabs(tabList).filter((tab) => tab !== draggedTab);
@@ -10,7 +11,7 @@ export const createLayoutPipeline = ({
   moveTabToList,
   onBeforeMeasure,
   constrainInsertionIndex,
-  tabAddSelector = '.tab--add'
+  tabAddSelector = defaultTabAddSelector
 }) => {
   let measurementCache = new Map();
 

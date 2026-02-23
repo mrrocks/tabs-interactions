@@ -158,7 +158,6 @@ export const createDragDomAdapter = ({
   };
 
   return {
-    toRectSnapshot,
     setElementTransform,
     setDragProxyBaseRect,
     setDragVisualTransform,
