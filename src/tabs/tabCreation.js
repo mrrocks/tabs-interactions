@@ -2,6 +2,7 @@ import { scaleDurationMs } from '../motion/motionSpeed';
 import { tabAddSelector, tabCloseSelector, panelSelector } from '../shared/selectors';
 import { activeTabClassName, inactiveTabClassName } from './tabState';
 import { randomizeTabContent, setActiveTab, getTabs, getActiveTabIndex, tabSelector } from './tabs';
+import { getTabCreationPosition, TabCreationPosition } from './tabCreationPosition';
 import { animatedRemovePanel } from '../window/windowManager';
 import { isEventTargetElement } from '../shared/dom';
 import { observeTabCompression, unobserveTabCompression } from './tabCompression';
@@ -172,11 +173,15 @@ const addTab = (tabList) => {
 
   const { tab, wrapper } = createTabElement();
 
-  const currentTabs = getTabs(tabList);
-  const activeIndex = getActiveTabIndex(tabList);
-  const insertBeforeNode = activeIndex >= 0 && activeIndex < currentTabs.length - 1
-    ? currentTabs[activeIndex + 1]
-    : addButton;
+  const position = getTabCreationPosition();
+  let insertBeforeNode = addButton;
+  if (position === TabCreationPosition.NEXT_TO_ACTIVE) {
+    const currentTabs = getTabs(tabList);
+    const activeIndex = getActiveTabIndex(tabList);
+    if (activeIndex >= 0 && activeIndex < currentTabs.length - 1) {
+      insertBeforeNode = currentTabs[activeIndex + 1];
+    }
+  }
   tabList.insertBefore(tab, insertBeforeNode);
 
   const faviconReady = randomizeTabContent(tab);

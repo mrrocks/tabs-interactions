@@ -29,23 +29,41 @@
   </head>
   <body class="preload">
     <div class="motion--control">
-      <label class="motion--label" for="motion-slowdown-slider">Motion slowdown</label>
-      <div class="motion--row">
-        <input
-          id="motion-slowdown-slider"
-          class="motion--slider"
-          data-motion-slider
-          type="range"
-          min="1"
-          max="6"
-          step="0.1"
-          value="1"
-          aria-valuemin="1"
-          aria-valuemax="6"
-          aria-valuenow="1"
-          aria-label="Global motion slowdown"
-        />
-        <output class="motion--value" data-motion-value for="motion-slowdown-slider">1.0x</output>
+      <div class="motion--group">
+        <label class="motion--label" for="motion-slowdown-slider">Global animation speed</label>
+        <div class="motion--row">
+          <input
+            id="motion-slowdown-slider"
+            class="motion--slider"
+            data-motion-slider
+            type="range"
+            min="1"
+            max="6"
+            step="0.1"
+            value="1"
+            aria-valuemin="1"
+            aria-valuemax="6"
+            aria-valuenow="1"
+            aria-label="Global motion slowdown"
+          />
+          <output class="motion--value" data-motion-value for="motion-slowdown-slider">1.0x</output>
+        </div>
+      </div>
+      <span class="motion--separator"></span>
+      <div class="motion--group">
+        <span class="motion--label">New tab creation</span>
+        <div class="motion--row">
+          <label class="motion--toggle-label" for="tab-position-toggle">
+            <input
+              id="tab-position-toggle"
+              class="motion--checkbox"
+              data-tab-position-toggle
+              type="checkbox"
+              checked
+            />
+            <span data-tab-position-label>Next to active</span>
+          </label>
+        </div>
       </div>
     </div>
     <div class="browser" data-resizable>

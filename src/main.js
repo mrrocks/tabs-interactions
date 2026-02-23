@@ -1,5 +1,6 @@
 import './styles.sass';
 import { initializeMotionSlowdownControl } from './motion/motionSpeed';
+import { initializeTabCreationPositionControl } from './tabs/tabCreationPosition';
 import { initializePanelInteraction, initializePanelInteractions } from './panel/panelInteraction';
 import { initializeTabDrag } from './tabDrag/tabDrag';
 import { initializeTabList, initializeTabs } from './tabs/tabs';
@@ -7,6 +8,7 @@ import { initializeWindowControls } from './window/windowControls';
 import { initializeWindowFocus } from './window/windowFocus';
 
 initializeMotionSlowdownControl();
+initializeTabCreationPositionControl();
 initializeWindowFocus();
 initializeWindowControls();
 initializeTabs();
