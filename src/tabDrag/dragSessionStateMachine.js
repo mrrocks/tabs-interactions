@@ -31,6 +31,7 @@ export const createDragSession = ({
   dragStarted: false,
   dragMoved: false,
   detachIntentActive: false,
+  detachedWidthPx: 0,
   sourcePanelRect: null,
   startX: toFiniteNumber(startX, 0),
   startY: toFiniteNumber(startY, 0),

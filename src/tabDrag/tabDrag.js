@@ -533,7 +533,9 @@ export const initializeTabDrag = ({
       detachTransition.activate({ overshootX, overshootY });
       if (dragState.dragProxy && !isPinned(dragState.draggedTab)) {
         const panel = dragState.currentTabList?.closest?.(panelSelector);
-        visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
+        const detachedWidth = resolveDetachedTabWidth(panel);
+        dragState.detachedWidthPx = detachedWidth;
+        visualWidth.animateToDetachedWidth(dragState, detachedWidth);
       }
     }
 
@@ -642,9 +644,9 @@ export const initializeTabDrag = ({
 
       if (dragState.detachIntentActive && !isPinned(dragState.draggedTab)) {
         const panel = sourceTabList?.closest?.(panelSelector);
-        visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel));
+        visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel) || dragState.detachedWidthPx);
       } else if (!dragState.detachIntentActive) {
-        visualWidth.reset(dragState);
+        visualWidth.animateToBaseWidth(dragState);
       }
       return false;
     }
