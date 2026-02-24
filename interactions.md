@@ -2,6 +2,33 @@
 
 **Prototype**: https://tabs-interactions.vercel.app/
 
+---
+
+## Interaction Priority & Complexity
+
+| Interaction                                                        | Priority      | ENG Complexity |
+|--------------------------------------------------------------------|---------------|----------------|
+| Tab activation/deactivation (double background + outer corners)    | P0 — Critical |                |
+| Tab creation and close animations (including outer corners)        | P0 — Critical |                |
+| Hover state animations (background, close button, add button)      | P0 — Critical |                |
+| Sibling tabs and add button shift in sync as dragged tab moves     | P0 — Critical |                |
+| Drag pop out visual effects (shadow, corner radius morph)          | P0 — Critical |                |
+| Drag inactive tab without activating it                            | P1 — High     |                |
+| Visual polish (gaps, nested radii, spacing, element positioning)   | P1 — High     |                |
+| All animations run at native refresh rate with no dropped frames   | P1 — High     |                |
+| Dragged tab resizes to fit destination window's tab bar            | P1 — High     |                |
+| Narrow tab close behavior (hidden by default, visible on active)   | P1 — High     |                |
+| Long press to trigger drag                                         | P2 — Medium   |                |
+| Drop tab onto another window without changing its active tab       | P2 — Medium   |                |
+| Pinned tab detach/reattach to another window                       | P2 — Medium   |                |
+| Tab detach with resistance                                         | P2 — Medium   |                |
+| Dragged tab anchored at pointer during window creation             | P2 — Medium   |                |
+| New tab inserts next to active tab                                 | P2 — Medium   |                |
+
+**Drag implementation note**: In the prototype, the dragged element is a proxy; a visual clone that follows the pointer. The original tab stays in the layout (invisible) to hold its slot. The proxy mirrors the original's dimensions so sibling displacement, resize, and drop positioning all stay in sync with the actual tab bar state.
+
+---
+
 ## Try in the prototype
 
 1. Click between tabs to see the activation animation (background rises + outer corners slide out)
