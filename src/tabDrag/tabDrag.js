@@ -13,7 +13,7 @@ import {
   removePanel
 } from '../window/windowManager';
 import { bringToFront, getOverlayZIndex } from '../window/windowFocus';
-import { DragPhase, createDragContext, transitionTo, markAsActivated, isActive } from './DragContext';
+import { DragPhase, createDragContext, transitionTo } from './DragContext';
 import { createLayoutPipeline } from './layoutPipeline';
 import { createDropResolver, isPointInsideRect } from './dropResolver';
 import { createAnimationCoordinator } from './animationCoordinator';
@@ -43,15 +43,16 @@ import {
 import { createHoverPreviewManager } from './hoverPreviewManager';
 import { createDetachPlaceholderManager } from './detachPlaceholder';
 import { createDragVisualWidthManager } from './dragVisualWidth';
-import {
-  animateCornerClipIn,
-  animateCornerClipOut,
-  animateBackgroundRadiusToAttached,
-  animateBackgroundRadiusToDetached
-} from './cornerClipAnimation';
-import { animateDragShadowIn, animateDragShadowOut } from './dragShadowAnimation';
+import { animateDragShadowOut } from './dragShadowAnimation';
 import { createDetachTransitionManager } from './detachTransition';
 import { dragTransitionDurationMs, dragShadowOutDurationMs } from './dragAnimationConfig';
+import {
+  measureAndLockFlexWidth,
+  clearDragInlineStyles,
+  applyProxyDetachedStyle,
+  applyProxyAttachedStyle,
+  applyTabAttachedStyle
+} from './styleHelpers';
 import { isPinned, pinnedClassName } from '../tabs/tabPinning';
 import {
   resolveEdgeSnapZone,
@@ -265,16 +266,7 @@ export const initializeTabDrag = ({
   };
 
   const lockToNaturalFlexWidth = (tab) => {
-    tab.style.flex = '';
-    tab.style.minWidth = '';
-    tab.style.maxWidth = '';
-
-    const widthPx = tab.getBoundingClientRect().width;
-    if (widthPx > 0) {
-      tab.style.flex = `0 0 ${widthPx}px`;
-      tab.style.minWidth = `${widthPx}px`;
-      tab.style.maxWidth = `${widthPx}px`;
-    }
+    measureAndLockFlexWidth(tab);
   };
 
   const commitDropAttach = ({ draggedTab, attachTargetTabList, pointerClientX }) => {
@@ -296,6 +288,77 @@ export const initializeTabDrag = ({
     }
 
     activateDraggedTabInTarget(draggedTab, attachTargetTabList);
+  };
+
+  const parkProxy = (state) => {
+    const proxy = state.dragProxy;
+    if (!proxy) return;
+    proxy.getAnimations?.({ subtree: true })?.forEach((a) => a.cancel());
+    proxy.style.visibility = 'hidden';
+    proxy.style.pointerEvents = 'none';
+    proxy.style.opacity = '';
+    state.proxyParked = true;
+  };
+
+  const parkProxyWithOffset = (state, clientX, clientY) => {
+    parkProxy(state);
+    if (state.detachedPanelFrame) {
+      state.detachedPointerOffset = {
+        x: clientX - state.detachedPanelFrame.left,
+        y: clientY - state.detachedPanelFrame.top
+      };
+    }
+  };
+
+  const unparkProxy = (state, clientX, clientY) => {
+    const proxy = state.dragProxy;
+    if (!proxy) return;
+    proxy.getAnimations?.({ subtree: true })?.forEach((a) => a.cancel());
+
+    const tabRect = state.draggedTab.getBoundingClientRect();
+    proxy.style.transform = 'translate3d(0px, 0px, 0px)';
+    proxy.style.left = `${tabRect.left}px`;
+    proxy.style.top = `${tabRect.top}px`;
+    proxy.style.visibility = '';
+    proxy.style.pointerEvents = '';
+    proxy.style.opacity = '0';
+    state.proxyParked = false;
+    dragDomAdapter.rebaseDragVisualAtPointer(state, clientX, clientY);
+
+    const durationMs = scaleDurationMs(dragTransitionDurationMs);
+    applyProxyDetachedStyle(proxy, { isActive: true, durationMs });
+    proxy.animate(
+      [{ opacity: '0' }, { opacity: '1' }],
+      { duration: durationMs, easing: 'ease', fill: 'forwards' }
+    );
+  };
+
+  const fadeOutProxy = (state, clientX, clientY) => {
+    const proxy = state.dragProxy;
+    if (!proxy || state.proxyParked) return;
+    const currentOpacity = getComputedStyle(proxy).opacity;
+    proxy.getAnimations().forEach((a) => a.cancel());
+    proxy.style.opacity = currentOpacity;
+    const durationMs = scaleDurationMs(dragTransitionDurationMs) * parseFloat(currentOpacity);
+    const fadeOut = proxy.animate(
+      [{ opacity: currentOpacity }, { opacity: '0' }],
+      { duration: Math.max(durationMs, 16), easing: 'ease', fill: 'forwards' }
+    );
+    fadeOut.addEventListener('finish', () => {
+      if (state.proxyParked) {
+        proxy.style.visibility = 'hidden';
+        proxy.style.opacity = '';
+        proxy.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+      }
+    }, { once: true });
+    proxy.style.pointerEvents = 'none';
+    state.proxyParked = true;
+    if (state.detachedPanelFrame) {
+      state.detachedPointerOffset = {
+        x: clientX - state.detachedPanelFrame.left,
+        y: clientY - state.detachedPanelFrame.top
+      };
+    }
   };
 
   const spawnDetachedWindowDuringDrag = (clientX, clientY) => {
@@ -338,6 +401,27 @@ export const initializeTabDrag = ({
 
     const tab = ctx.draggedTab;
     const proxy = ctx.dragProxy;
+    let scaleInCompleted = false;
+
+    const onScaleInComplete = () => {
+      scaleInCompleted = true;
+      clearTimeout(scaleInFallbackId);
+      tab.style.visibility = '';
+      if (!ctx || ctx.dragProxy !== proxy) {
+        dragDomAdapter.removeDragProxy(proxy);
+        return;
+      }
+      if (ctx.proxyParked || hoverPreview.previewTabList != null) {
+        return;
+      }
+      parkProxyWithOffset(ctx, ctx.lastClientX, ctx.lastClientY);
+    };
+
+    const scaleInFallbackId = setTimeout(() => {
+      if (!scaleInCompleted) {
+        onScaleInComplete();
+      }
+    }, scaleDurationMs(300));
 
     animateDetachedWindowFromTab({
       ...detachedWindow,
@@ -347,14 +431,7 @@ export const initializeTabDrag = ({
         tab.classList.add(noTransitionClassName);
         placeholderManager.restoreDisplay(tab);
         tab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
-        tab.style.transform = '';
-        tab.style.transition = '';
-        tab.style.flex = '';
-        tab.style.flexBasis = '';
-        tab.style.minWidth = '';
-        tab.style.maxWidth = '';
-        tab.style.willChange = '';
-        tab.style.zIndex = '';
+        clearDragInlineStyles(tab);
         tab.style.visibility = 'hidden';
         if (proxy) {
           const wasInactive = proxy.classList.contains(inactiveDragClassName);
@@ -364,36 +441,13 @@ export const initializeTabDrag = ({
             proxy.classList.remove(inactiveDragClassName);
             proxy.classList.add(activeDragClassName);
           }
-          const durationMs = scaleDurationMs(dragTransitionDurationMs);
-          animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
-          animateBackgroundRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
-          animateDragShadowOut(proxy, {
-            durationMs: scaleDurationMs(dragShadowOutDurationMs),
-            isActive: true
-          });
+          applyProxyAttachedStyle(proxy, { isActive: true });
         }
         tab.getBoundingClientRect();
         tab.classList.remove(noTransitionClassName);
         setActiveTab(detachedWindow.tabList, 0);
       },
-      onComplete: () => {
-        tab.style.visibility = '';
-        if (!ctx || ctx.dragProxy !== proxy) {
-          dragDomAdapter.removeDragProxy(proxy);
-          return;
-        }
-        if (ctx.proxyParked || hoverPreview.previewTabList != null) {
-          return;
-        }
-        const frame = ctx.detachedPanelFrame;
-        ctx.detachedPointerOffset = {
-          x: ctx.lastClientX - frame.left,
-          y: ctx.lastClientY - frame.top
-        };
-        proxy.style.visibility = 'hidden';
-        proxy.style.pointerEvents = 'none';
-        ctx.proxyParked = true;
-      }
+      onComplete: onScaleInComplete
     });
 
     ctx.detachedPanel = detachedWindow.panel;
@@ -443,19 +497,10 @@ export const initializeTabDrag = ({
     };
 
     ctx.draggedTab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
-    ctx.draggedTab.style.transform = '';
-    ctx.draggedTab.style.transition = '';
-    ctx.draggedTab.style.flex = '';
-    ctx.draggedTab.style.flexBasis = '';
-    ctx.draggedTab.style.minWidth = '';
-    ctx.draggedTab.style.maxWidth = '';
-    ctx.draggedTab.style.willChange = '';
-    ctx.draggedTab.style.zIndex = '';
+    clearDragInlineStyles(ctx.draggedTab);
 
     if (ctx.dragProxy) {
-      ctx.dragProxy.style.visibility = 'hidden';
-      ctx.dragProxy.style.pointerEvents = 'none';
-      ctx.proxyParked = true;
+      parkProxy(ctx);
     }
 
     hoverPreview.clear();
@@ -569,6 +614,43 @@ export const initializeTabDrag = ({
     return true;
   };
 
+  const computeDetachState = (clientX, clientY) => {
+    const refRect = getDetachReferenceRect(ctx.currentTabList);
+    const overshootX = refRect
+      ? computeOvershoot({ value: clientX, min: refRect.left, max: refRect.right, inset: resistanceOnsetInsetPx })
+      : 0;
+    const overshootY = refRect
+      ? computeOvershoot({ value: clientY, min: refRect.top, max: refRect.bottom, inset: resistanceOnsetInsetPx })
+      : 0;
+
+    if (ctx.reattachArmed) {
+      ctx.detachIntentActive = resolveDetachIntent({
+        currentIntent: ctx.detachIntentActive,
+        overshootX,
+        overshootY
+      });
+    } else if (
+      Math.abs(overshootX) < detachThresholdPx * 0.5 &&
+      Math.abs(overshootY) < detachThresholdPx * 0.5
+    ) {
+      ctx.reattachArmed = true;
+    }
+
+    if (ctx.detachIntentActive) {
+      const hoverTarget = dropResolver.resolveAttachTargetTabList({
+        clientX,
+        clientY,
+        excludedTabList: ctx.currentTabList,
+        padding: windowAttachPaddingPx
+      });
+      if (hoverTarget) {
+        ctx.detachIntentActive = false;
+      }
+    }
+
+    return { overshootX, overshootY };
+  };
+
   const phases = {
     [DragPhase.pressed]: {
       enter() {
@@ -592,38 +674,7 @@ export const initializeTabDrag = ({
         const deltaX = clientX - ctx.startX;
         const deltaY = clientY - ctx.startY;
 
-        const refRect = getDetachReferenceRect(ctx.currentTabList);
-        const overshootX = refRect
-          ? computeOvershoot({ value: clientX, min: refRect.left, max: refRect.right, inset: resistanceOnsetInsetPx })
-          : 0;
-        const overshootY = refRect
-          ? computeOvershoot({ value: clientY, min: refRect.top, max: refRect.bottom, inset: resistanceOnsetInsetPx })
-          : 0;
-
-        if (ctx.reattachArmed) {
-          ctx.detachIntentActive = resolveDetachIntent({
-            currentIntent: ctx.detachIntentActive,
-            overshootX,
-            overshootY
-          });
-        } else if (
-          Math.abs(overshootX) < detachThresholdPx * 0.5 &&
-          Math.abs(overshootY) < detachThresholdPx * 0.5
-        ) {
-          ctx.reattachArmed = true;
-        }
-
-        if (ctx.detachIntentActive) {
-          const hoverTarget = dropResolver.resolveAttachTargetTabList({
-            clientX,
-            clientY,
-            excludedTabList: ctx.currentTabList,
-            padding: windowAttachPaddingPx
-          });
-          if (hoverTarget) {
-            ctx.detachIntentActive = false;
-          }
-        }
+        const { overshootX, overshootY } = computeDetachState(clientX, clientY);
 
         if (ctx.detachIntentActive) {
           setPhase(DragPhase.detachIntent);
@@ -685,13 +736,7 @@ export const initializeTabDrag = ({
         const deltaX = clientX - ctx.startX;
         const deltaY = clientY - ctx.startY;
 
-        const refRect = getDetachReferenceRect(ctx.currentTabList);
-        const overshootX = refRect
-          ? computeOvershoot({ value: clientX, min: refRect.left, max: refRect.right, inset: resistanceOnsetInsetPx })
-          : 0;
-        const overshootY = refRect
-          ? computeOvershoot({ value: clientY, min: refRect.top, max: refRect.bottom, inset: resistanceOnsetInsetPx })
-          : 0;
+        const { overshootX, overshootY } = computeDetachState(clientX, clientY);
 
         if (pendingDetachSpawn && !detachTransition.active) {
           pendingDetachSpawn = false;
@@ -807,27 +852,7 @@ export const initializeTabDrag = ({
 
   const enterHoverAttach = (clientX, clientY) => {
     if (ctx.proxyParked && ctx.dragProxy) {
-      const proxy = ctx.dragProxy;
-      proxy.getAnimations({ subtree: true }).forEach((a) => a.cancel());
-
-      const tabRect = ctx.draggedTab.getBoundingClientRect();
-      proxy.style.transform = 'translate3d(0px, 0px, 0px)';
-      proxy.style.left = `${tabRect.left}px`;
-      proxy.style.top = `${tabRect.top}px`;
-      proxy.style.visibility = '';
-      proxy.style.pointerEvents = '';
-      proxy.style.opacity = '0';
-      ctx.proxyParked = false;
-      dragDomAdapter.rebaseDragVisualAtPointer(ctx, clientX, clientY);
-
-      const durationMs = scaleDurationMs(dragTransitionDurationMs);
-      animateCornerClipOut(proxy, { durationMs });
-      animateBackgroundRadiusToDetached(proxy, { durationMs });
-      animateDragShadowIn(proxy, { durationMs, isActive: true });
-      proxy.animate(
-        [{ opacity: '0' }, { opacity: '1' }],
-        { duration: durationMs, easing: 'ease', fill: 'forwards' }
-      );
+      unparkProxy(ctx, clientX, clientY);
     }
     ctx.draggedTab.classList.add(dragSourceClassName);
     if (!detachWindowToggle) {
@@ -845,31 +870,7 @@ export const initializeTabDrag = ({
 
   const leaveHoverAttach = (clientX, clientY) => {
     ctx.draggedTab.classList.remove(dragSourceClassName);
-    if (ctx.dragProxy && !ctx.proxyParked) {
-      const proxy = ctx.dragProxy;
-      const currentOpacity = getComputedStyle(proxy).opacity;
-      proxy.getAnimations().forEach((a) => a.cancel());
-      proxy.style.opacity = currentOpacity;
-      const durationMs = scaleDurationMs(dragTransitionDurationMs) * parseFloat(currentOpacity);
-      const fadeOut = proxy.animate(
-        [{ opacity: currentOpacity }, { opacity: '0' }],
-        { duration: Math.max(durationMs, 16), easing: 'ease', fill: 'forwards' }
-      );
-      fadeOut.addEventListener('finish', () => {
-        if (ctx?.proxyParked) {
-          proxy.style.visibility = 'hidden';
-          proxy.style.opacity = '';
-          proxy.getAnimations({ subtree: true }).forEach((a) => a.cancel());
-        }
-      }, { once: true });
-      proxy.style.pointerEvents = 'none';
-      ctx.proxyParked = true;
-      const frame = ctx.detachedPanelFrame;
-      ctx.detachedPointerOffset = {
-        x: clientX - frame.left,
-        y: clientY - frame.top
-      };
-    }
+    fadeOutProxy(ctx, clientX, clientY);
     if (detachWindowToggle) {
       detachWindowToggle.expand();
     }
@@ -897,17 +898,8 @@ export const initializeTabDrag = ({
 
     dragDomAdapter.applyDragStyles(ctx);
 
-    if (wasActive && ctx.dragProxy) {
-      const durationMs = scaleDurationMs(dragTransitionDurationMs);
-      animateCornerClipOut(ctx.dragProxy, { durationMs });
-      animateBackgroundRadiusToDetached(ctx.dragProxy, { durationMs });
-    }
-
     if (ctx.dragProxy) {
-      animateDragShadowIn(ctx.dragProxy, {
-        durationMs: scaleDurationMs(dragTransitionDurationMs),
-        isActive: wasActive
-      });
+      applyProxyDetachedStyle(ctx.dragProxy, { isActive: wasActive });
     }
 
     if (typeof document !== 'undefined' && document.body) {
@@ -999,10 +991,15 @@ export const initializeTabDrag = ({
           setElementTransform: dragDomAdapter.setElementTransform
         });
 
-        animationCoordinator.finalizeOnAnimationSettled(settleAnimation, () => {
+        let settleCleanedUp = false;
+        const settleCleanup = () => {
+          if (settleCleanedUp) return;
+          settleCleanedUp = true;
           tab.style.visibility = '';
           dragDomAdapter.removeDragProxy(proxy);
-        });
+        };
+        animationCoordinator.finalizeOnAnimationSettled(settleAnimation, settleCleanup);
+        setTimeout(settleCleanup, scaleDurationMs(dragTransitionDurationMs) + 100);
 
         removePanel(completedState.detachedPanel);
       } else if (attachTarget && hoverPreview.previewTab) {
@@ -1071,9 +1068,7 @@ export const initializeTabDrag = ({
       }
 
       if (completedState.draggedTab.classList.contains(activeTabClassName)) {
-        const durationMs = scaleDurationMs(dragTransitionDurationMs);
-        animateCornerClipIn(completedState.draggedTab, { durationMs });
-        animateBackgroundRadiusToAttached(completedState.draggedTab, { durationMs });
+        applyTabAttachedStyle(completedState.draggedTab);
       }
     };
 

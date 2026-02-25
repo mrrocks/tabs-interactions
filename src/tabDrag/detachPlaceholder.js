@@ -1,4 +1,5 @@
 import { dragTransitionEasing } from './dragAnimationConfig';
+import { setFlexLock } from './styleHelpers';
 
 export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapseDurationMs }) => {
   let placeholder = null;
@@ -6,18 +7,12 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
   let hiddenTab = null;
   let logicalWidthPx = 0;
 
-  const setFlexWidth = (el, widthPx) => {
-    el.style.flex = `0 0 ${widthPx}px`;
-    el.style.minWidth = `${widthPx}px`;
-    el.style.maxWidth = `${widthPx}px`;
-  };
-
   const createPlaceholderElement = (widthPx) => {
     const el = document.createElement('div');
     el.setAttribute('aria-hidden', 'true');
     el.style.overflow = 'hidden';
     el.style.height = '0';
-    setFlexWidth(el, widthPx);
+    setFlexLock(el, widthPx);
     return el;
   };
 
@@ -77,12 +72,12 @@ export const createDetachPlaceholderManager = ({ scaleDurationMs, detachCollapse
         const durationMs = scaleDurationMs(detachCollapseDurationMs);
         const ease = `${durationMs}ms ${dragTransitionEasing}`;
         placeholder.style.transition = `flex-basis ${ease}, min-width ${ease}, max-width ${ease}`;
-        setFlexWidth(placeholder, 0);
+        setFlexLock(placeholder, 0);
       }
     } else if (placeholder && collapsed) {
       collapsed = false;
       logicalWidthPx = lockedTabWidthPx;
-      setFlexWidth(placeholder, lockedTabWidthPx);
+      setFlexLock(placeholder, lockedTabWidthPx);
     }
   };
 
