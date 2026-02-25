@@ -14,6 +14,7 @@ import {
 } from './panelEdgeSnap';
 import { tabItemSelector, tabAddSelector, tabCloseSelector, windowControlsSelector } from '../shared/selectors';
 import { toFiniteNumber } from '../shared/math';
+import { createPointerFrameLoop } from '../shared/pointerFrameLoop';
 
 const resizeHitArea = 10;
 const grabCursor = 'grab';
@@ -33,11 +34,7 @@ export const initializePanelInteraction = (panel) => {
   initializedPanels.add(panel);
 
   let interactionState = null;
-  let frameRequestId = 0;
   let panelFrame = null;
-  let queuedClientX = 0;
-  let queuedClientY = 0;
-  let hasQueuedPointer = false;
   let activeCursor = '';
   let panelMinWidth = 0;
   let panelMinHeight = 0;
@@ -125,65 +122,35 @@ export const initializePanelInteraction = (panel) => {
     return direction;
   };
 
-  const applyInteractionSample = () => {
-    if (!panelFrame || !interactionState || !hasQueuedPointer) {
-      return;
-    }
+  const pointerLoop = createPointerFrameLoop({
+    onSample(clientX, clientY) {
+      if (!panelFrame || !interactionState || !pointerLoop.hasQueued) return;
 
-    if (interactionState.mode === 'resize') {
-      const frame = getResizedFrame({
-        ...interactionState,
-        clientX: queuedClientX,
-        clientY: queuedClientY,
-        minWidth: panelMinWidth,
-        minHeight: panelMinHeight
+      if (interactionState.mode === 'resize') {
+        setPanelFrame(getResizedFrame({
+          ...interactionState,
+          clientX,
+          clientY,
+          minWidth: panelMinWidth,
+          minHeight: panelMinHeight
+        }));
+        return;
+      }
+
+      setPanelFrame({
+        ...panelFrame,
+        ...getDraggedFrame({ ...interactionState, clientX, clientY })
       });
 
-      setPanelFrame(frame);
-      return;
+      const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
+      if (snapZone) {
+        if (!edgeSnapPreview) edgeSnapPreview = createEdgeSnapPreview();
+        edgeSnapPreview.show(snapZone);
+      } else if (edgeSnapPreview) {
+        edgeSnapPreview.hide();
+      }
     }
-
-    const dragFrame = getDraggedFrame({
-      ...interactionState,
-      clientX: queuedClientX,
-      clientY: queuedClientY
-    });
-
-    setPanelFrame({
-      ...panelFrame,
-      ...dragFrame
-    });
-
-    const snapZone = resolveEdgeSnapZone(queuedClientX, window.innerWidth);
-    if (snapZone) {
-      if (!edgeSnapPreview) edgeSnapPreview = createEdgeSnapPreview();
-      edgeSnapPreview.show(snapZone);
-    } else if (edgeSnapPreview) {
-      edgeSnapPreview.hide();
-    }
-  };
-
-  const processInteractionFrame = () => {
-    frameRequestId = 0;
-    applyInteractionSample();
-  };
-
-  const scheduleInteractionFrame = () => {
-    if (frameRequestId !== 0) {
-      return;
-    }
-
-    frameRequestId = window.requestAnimationFrame(processInteractionFrame);
-  };
-
-  const flushInteractionFrame = () => {
-    if (frameRequestId !== 0) {
-      window.cancelAnimationFrame(frameRequestId);
-      frameRequestId = 0;
-    }
-
-    applyInteractionSample();
-  };
+  });
 
   const clearInteractionListeners = () => {
     window.removeEventListener('pointermove', onPointerMove);
@@ -192,28 +159,18 @@ export const initializePanelInteraction = (panel) => {
   };
 
   const onPointerMove = (event) => {
-    if (!interactionState || event.pointerId !== interactionState.pointerId) {
-      return;
-    }
-
-    queuedClientX = event.clientX;
-    queuedClientY = event.clientY;
-    hasQueuedPointer = true;
-
-    scheduleInteractionFrame();
+    if (!interactionState || event.pointerId !== interactionState.pointerId) return;
+    pointerLoop.queue(event.clientX, event.clientY);
+    pointerLoop.schedule();
   };
 
   const onPointerUp = (event) => {
-    if (!interactionState || event.pointerId !== interactionState.pointerId) {
-      return;
-    }
+    if (!interactionState || event.pointerId !== interactionState.pointerId) return;
 
     const wasDrag = interactionState.mode === 'drag';
 
-    queuedClientX = event.clientX;
-    queuedClientY = event.clientY;
-    hasQueuedPointer = true;
-    flushInteractionFrame();
+    pointerLoop.queue(event.clientX, event.clientY);
+    pointerLoop.flush();
 
     if (panel.hasPointerCapture(event.pointerId)) {
       panel.releasePointerCapture(event.pointerId);
@@ -237,7 +194,7 @@ export const initializePanelInteraction = (panel) => {
     }
 
     interactionState = null;
-    hasQueuedPointer = false;
+    pointerLoop.reset();
     document.body.style.userSelect = '';
     updatePointerDirection(event.clientX, event.clientY);
     clearInteractionListeners();
@@ -306,9 +263,7 @@ export const initializePanelInteraction = (panel) => {
       startLeft: panelFrame.left,
       startTop: panelFrame.top
     };
-    queuedClientX = event.clientX;
-    queuedClientY = event.clientY;
-    hasQueuedPointer = true;
+    pointerLoop.queue(event.clientX, event.clientY);
 
     panel.setPointerCapture(event.pointerId);
     document.body.style.userSelect = 'none';

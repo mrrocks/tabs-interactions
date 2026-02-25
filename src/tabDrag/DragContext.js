@@ -58,6 +58,11 @@ export const createDragContext = ({
   detachedPointerOffset: null,
   proxyParked: false,
 
+  sourceWindowRemovedDuringDetach: false,
+  pendingDetachSpawn: false,
+  detachWindowToggle: null,
+  detachEdgeSnapPreview: null,
+
   initialUserSelect,
   initialInlineStyles
 });

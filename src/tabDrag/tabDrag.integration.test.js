@@ -3,6 +3,8 @@ import { shouldCloseSourcePanelAfterTransfer } from './dragCalculations';
 import { initializeTabDrag } from './tabDrag';
 import { createLayoutPipeline } from './layoutPipeline';
 import { createDropResolver } from './dropResolver';
+import { createClassList } from '../test-helpers/domMocks';
+import { stubBrowserGlobals } from '../test-helpers/globalStubs';
 
 const tabWidth = 120;
 const tabHeight = 40;
@@ -349,38 +351,7 @@ describe('tab drag integration flows', () => {
   });
 
   it('keeps cross-window hover as preview until pointer release', () => {
-    const previousWindow = globalThis.window;
-    const previousDocument = globalThis.document;
-    const previousElement = globalThis.Element;
-
-    const createClassList = (initialNames = []) => {
-      const names = new Set(initialNames);
-      return {
-        add: (...classNames) => {
-          classNames.forEach((name) => names.add(name));
-        },
-        remove: (...classNames) => {
-          classNames.forEach((name) => names.delete(name));
-        },
-        contains: (className) => names.has(className),
-        toggle: (className, force) => {
-          if (force === true) {
-            names.add(className);
-            return true;
-          }
-          if (force === false) {
-            names.delete(className);
-            return false;
-          }
-          if (names.has(className)) {
-            names.delete(className);
-            return false;
-          }
-          names.add(className);
-          return true;
-        }
-      };
-    };
+    const globals = stubBrowserGlobals();
 
     const tabWidthPx = 120;
     const tabHeightPx = 40;
@@ -694,9 +665,7 @@ describe('tab drag integration flows', () => {
     const previousRAF = globalThis.requestAnimationFrame;
     const previousCAF = globalThis.cancelAnimationFrame;
 
-    globalThis.window = windowStub;
-    globalThis.document = documentStub;
-    globalThis.Element = ElementStub;
+    globals.apply(windowStub, documentStub, ElementStub);
     globalThis.requestAnimationFrame = windowStub.requestAnimationFrame;
     globalThis.cancelAnimationFrame = windowStub.cancelAnimationFrame;
 
@@ -747,47 +716,14 @@ describe('tab drag integration flows', () => {
       ).toContain('tab-a');
       expect(getTabNodes(targetTabList).every((tab) => Boolean(tab.id))).toBe(true);
     } finally {
-      globalThis.window = previousWindow;
-      globalThis.document = previousDocument;
-      globalThis.Element = previousElement;
+      globals.restore();
       globalThis.requestAnimationFrame = previousRAF;
       globalThis.cancelAnimationFrame = previousCAF;
     }
   });
 
   it('promotes single-tab window to detached panel on drag activation', () => {
-    const previousWindow = globalThis.window;
-    const previousDocument = globalThis.document;
-    const previousElement = globalThis.Element;
-
-    const createClassList = (initialNames = []) => {
-      const names = new Set(initialNames);
-      return {
-        add: (...classNames) => {
-          classNames.forEach((name) => names.add(name));
-        },
-        remove: (...classNames) => {
-          classNames.forEach((name) => names.delete(name));
-        },
-        contains: (className) => names.has(className),
-        toggle: (className, force) => {
-          if (force === true) {
-            names.add(className);
-            return true;
-          }
-          if (force === false) {
-            names.delete(className);
-            return false;
-          }
-          if (names.has(className)) {
-            names.delete(className);
-            return false;
-          }
-          names.add(className);
-          return true;
-        }
-      };
-    };
+    const globals = stubBrowserGlobals();
 
     const windowListeners = new Map();
     const rootListeners = new Map();
@@ -1003,9 +939,7 @@ describe('tab drag integration flows', () => {
 
     class ElementStub {}
 
-    globalThis.window = windowStub;
-    globalThis.document = documentStub;
-    globalThis.Element = ElementStub;
+    globals.apply(windowStub, documentStub, ElementStub);
 
     try {
       initializeTabDrag({ root });
@@ -1033,9 +967,7 @@ describe('tab drag integration flows', () => {
         clientX: 140,
         clientY: 340
       });
-      globalThis.window = previousWindow;
-      globalThis.document = previousDocument;
-      globalThis.Element = previousElement;
+      globals.restore();
     }
   });
 });
