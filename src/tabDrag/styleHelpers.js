@@ -1,4 +1,5 @@
 import { scaleDurationMs } from '../motion/motionSpeed';
+import { onAnimationSettled } from '../shared/dom';
 import {
   animateCornerClipIn,
   animateCornerClipOut,
@@ -20,13 +21,30 @@ export const clearFlexLock = (el) => {
   el.style.maxWidth = '';
 };
 
-export const measureAndLockFlexWidth = (el) => {
+export const animateFlexWidthTransition = (el, { durationMs, easing }) => {
+  const currentWidth = el.getBoundingClientRect().width;
   clearFlexLock(el);
-  const widthPx = el.getBoundingClientRect().width;
-  if (widthPx > 0) {
-    setFlexLock(el, widthPx);
+  const naturalWidth = el.getBoundingClientRect().width;
+
+  if (naturalWidth <= 0 || Math.abs(currentWidth - naturalWidth) < 1) {
+    return null;
   }
-  return widthPx;
+
+  setFlexLock(el, currentWidth);
+
+  const anim = el.animate(
+    [
+      { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
+      { minWidth: `${naturalWidth}px`, maxWidth: `${naturalWidth}px` }
+    ],
+    { duration: durationMs, easing, fill: 'forwards' }
+  );
+
+  onAnimationSettled(anim, () => {
+    anim.cancel();
+    clearFlexLock(el);
+  });
+  return anim;
 };
 
 const DRAG_STYLE_KEYS = ['transform', 'transition', 'flex', 'flexBasis', 'minWidth', 'maxWidth', 'willChange', 'zIndex'];

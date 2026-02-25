@@ -37,12 +37,11 @@ import { createHoverPreviewManager } from './hoverPreviewManager';
 import { createDetachPlaceholderManager } from './detachPlaceholder';
 import { createDragVisualWidthManager } from './dragVisualWidth';
 import { createDetachTransitionManager } from './detachTransition';
-import { dragTransitionDurationMs } from './dragAnimationConfig';
+import { dragTransitionDurationMs, dragTransitionEasing } from './dragAnimationConfig';
 import {
-  measureAndLockFlexWidth,
+  animateFlexWidthTransition,
   clearDragInlineStyles,
-  applyProxyDetachedStyle,
-  applyProxyAttachedStyle
+  applyProxyDetachedStyle
 } from './styleHelpers';
 import { isPinned, pinnedClassName } from '../tabs/tabPinning';
 import { spawnDetachedWindow, promotePanelToDetached } from './detachedWindowSpawner';
@@ -203,7 +202,10 @@ export const initializeTabDrag = ({
     });
 
     if (didCommitPreviewDrop) {
-      measureAndLockFlexWidth(draggedTab);
+      animateFlexWidthTransition(draggedTab, {
+        durationMs: scaleDurationMs(dragTransitionDurationMs),
+        easing: dragTransitionEasing
+      });
     } else {
       moveTabWithLayoutPipeline({
         tabList: attachTargetTabList,
@@ -612,6 +614,12 @@ export const initializeTabDrag = ({
           const prevPointerEvents = ctx.detachedPanel.style.pointerEvents;
           ctx.detachedPanel.style.pointerEvents = 'none';
           const wasAttached = hoverPreview.previewTabList != null;
+
+          const shouldUnpark = !wasAttached && ctx.proxyParked && ctx.dragProxy;
+          if (shouldUnpark) {
+            unparkProxy(ctx, clientX, clientY);
+          }
+
           const didAttach = attachToHoveredTabListFromAttachedDrag(clientX, clientY);
           ctx.detachedPanel.style.pointerEvents = prevPointerEvents;
 
@@ -619,6 +627,8 @@ export const initializeTabDrag = ({
             enterHoverAttach(clientX, clientY);
           } else if (!didAttach && wasAttached) {
             leaveHoverAttach(clientX, clientY);
+          } else if (shouldUnpark && !didAttach) {
+            parkProxy(ctx);
           }
         }
       },
@@ -641,9 +651,6 @@ export const initializeTabDrag = ({
   };
 
   const enterHoverAttach = (clientX, clientY) => {
-    if (ctx.proxyParked && ctx.dragProxy) {
-      unparkProxy(ctx, clientX, clientY);
-    }
     ctx.draggedTab.classList.add(dragSourceClassName);
     if (!ctx.detachWindowToggle) {
       ctx.detachWindowToggle = createDetachedWindowToggle({
@@ -719,7 +726,6 @@ export const initializeTabDrag = ({
     setPhase(DragPhase.settling);
     ctx = null;
     pointerLoop.reset();
-    visualWidth.cancelAll();
     detachTransition.reset();
     clearGlobalListeners();
 

@@ -16,7 +16,7 @@ import {
 } from './dragCalculations';
 import { animateDragShadowOut } from './dragShadowAnimation';
 import { dragTransitionDurationMs, dragShadowOutDurationMs } from './dragAnimationConfig';
-import { applyTabAttachedStyle } from './styleHelpers';
+import { applyTabAttachedStyle, applyProxyAttachedStyle } from './styleHelpers';
 import { captureSourceActivation } from './detachedWindowSpawner';
 import {
   computeSnappedFrame,
@@ -26,7 +26,7 @@ import {
 import { activeDragClassName } from './dragClassNames';
 
 export const settleDetachedDrag = (completedState, deps) => {
-  const { dragDomAdapter, hoverPreview, animationCoordinator, visualWidth } = deps;
+  const { dragDomAdapter, hoverPreview, animationCoordinator, visualWidth, commitDropAttach } = deps;
 
   if (completedState.detachWindowToggle) {
     completedState.detachWindowToggle.destroy();
@@ -34,55 +34,56 @@ export const settleDetachedDrag = (completedState, deps) => {
   }
 
   const attachTarget = hoverPreview.previewTabList;
+  const tab = completedState.draggedTab;
+  const proxy = completedState.dragProxy;
 
-  if (attachTarget && hoverPreview.previewTab && completedState.dragProxy) {
-    const tab = completedState.draggedTab;
-    const proxy = completedState.dragProxy;
-
+  if (attachTarget && hoverPreview.previewTab) {
     tab.style.visibility = '';
-    dragDomAdapter.restoreDraggedTabStyles(completedState);
-    hoverPreview.commitDrop({ draggedTab: tab, attachTargetTabList: attachTarget });
-    deps.activateDraggedTabInTarget(tab, attachTarget);
-    tab.style.visibility = 'hidden';
+    visualWidth.cancelAll();
 
-    animateDragShadowOut(proxy, {
-      durationMs: scaleDurationMs(dragShadowOutDurationMs),
-      isActive: proxy.classList.contains(activeDragClassName)
-    });
-
-    const settleAnimation = animationCoordinator.animateProxySettleToTarget({
-      dragProxy: proxy,
+    commitDropAttach({
       draggedTab: tab,
-      toRectSnapshot,
-      setDragProxyBaseRect: (rect) => {
-        dragDomAdapter.setDragProxyBaseRect(completedState, rect);
-      },
-      setElementTransform: dragDomAdapter.setElementTransform
+      attachTargetTabList: attachTarget,
+      pointerClientX: completedState.lastClientX
     });
 
-    let settleCleanedUp = false;
-    const settleCleanup = () => {
-      if (settleCleanedUp) return;
-      settleCleanedUp = true;
-      tab.style.visibility = '';
-      dragDomAdapter.removeDragProxy(proxy);
-    };
-    animationCoordinator.finalizeOnAnimationSettled(settleAnimation, settleCleanup);
-    setTimeout(settleCleanup, scaleDurationMs(dragTransitionDurationMs) + 100);
-
-    removePanel(completedState.detachedPanel);
-  } else if (attachTarget && hoverPreview.previewTab) {
-    const tab = completedState.draggedTab;
-    tab.style.visibility = '';
     dragDomAdapter.restoreDraggedTabStyles(completedState);
-    dragDomAdapter.removeDragProxy(completedState.dragProxy);
-    hoverPreview.commitDrop({ draggedTab: tab, attachTargetTabList: attachTarget });
-    deps.activateDraggedTabInTarget(tab, attachTarget);
+
+    if (proxy) {
+      tab.style.visibility = 'hidden';
+
+      applyProxyAttachedStyle(proxy, {
+        isActive: proxy.classList.contains(activeDragClassName)
+      });
+
+      const settleAnimation = animationCoordinator.animateProxySettleToTarget({
+        dragProxy: proxy,
+        draggedTab: tab,
+        toRectSnapshot,
+        setDragProxyBaseRect: (rect) => {
+          dragDomAdapter.setDragProxyBaseRect(completedState, rect);
+        },
+        setElementTransform: dragDomAdapter.setElementTransform
+      });
+
+      let settleCleanedUp = false;
+      const settleCleanup = () => {
+        if (settleCleanedUp) return;
+        settleCleanedUp = true;
+        tab.style.visibility = '';
+        dragDomAdapter.removeDragProxy(proxy);
+      };
+      animationCoordinator.finalizeOnAnimationSettled(settleAnimation, settleCleanup);
+      setTimeout(settleCleanup, scaleDurationMs(dragTransitionDurationMs) + 100);
+    } else {
+      dragDomAdapter.removeDragProxy(proxy);
+    }
+
     removePanel(completedState.detachedPanel);
   } else {
-    completedState.draggedTab.style.visibility = '';
+    tab.style.visibility = '';
     dragDomAdapter.restoreDraggedTabStyles(completedState);
-    dragDomAdapter.removeDragProxy(completedState.dragProxy);
+    dragDomAdapter.removeDragProxy(proxy);
   }
 
   if (!attachTarget && completedState.detachEdgeSnapPreview?.activeZone) {
@@ -209,7 +210,9 @@ export const settleAttachedDrag = (completedState, deps) => {
 
   placeholderManager.restoreDisplay(completedState.draggedTab);
   hoverPreview.clear();
-  if (dropDestination !== 'attach') {
+  if (dropDestination === 'attach') {
+    visualWidth.cancelAll();
+  } else {
     visualWidth.reset(completedState);
   }
   animateDragShadowOut(completedState.dragProxy, {
