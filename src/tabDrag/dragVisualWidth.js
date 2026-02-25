@@ -113,17 +113,16 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
     cancelAll();
 
-    const siblings = getSiblings(previewTab);
-    const snapshot = snapshotSiblingPositions(siblings);
-
-    previewTab.style.minWidth = '';
-    previewTab.style.maxWidth = '';
-    previewTab.style.flex = '';
-
-    const settledWidthPx = previewTab.getBoundingClientRect().width;
+    const settledWidthPx = resolveHoverPreviewWidthPx({
+      dragProxyBaseRect: session.dragProxyBaseRect,
+      draggedTab: session.draggedTab
+    });
     if (settledWidthPx <= 0) {
       return { displacements: [] };
     }
+
+    const siblings = getSiblings(previewTab);
+    const snapshot = snapshotSiblingPositions(siblings);
 
     const startWidthPx = Math.min(toFiniteNumber(fromWidthPx, 0), settledWidthPx);
 
