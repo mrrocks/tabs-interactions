@@ -566,15 +566,6 @@ export const initializeTabDrag = ({
         const { overshootX, overshootY } = computeDetachState(clientX, clientY);
         const correction = detachTransition.sample();
 
-        if (ctx.pendingDetachSpawn && !detachTransition.active) {
-          ctx.pendingDetachSpawn = false;
-          spawnDetachedWindow(ctx, spawnerDeps);
-          if (ctx.detachedPanel) {
-            setPhase(DragPhase.detachedDragging);
-            return;
-          }
-        }
-
         if (ctx.dragProxy) {
           const isLastTab = shouldRemoveSourceWindowOnDetach(ctx.sourceTabCount);
 
@@ -613,6 +604,15 @@ export const initializeTabDrag = ({
           detachIntentActive: true
         }) + correction.y;
         dragDomAdapter.setDragVisualTransform(ctx, visualOffsetX, visualOffsetY);
+
+        if (ctx.pendingDetachSpawn && !detachTransition.active) {
+          ctx.pendingDetachSpawn = false;
+          spawnDetachedWindow(ctx, spawnerDeps);
+          if (ctx.detachedPanel) {
+            setPhase(DragPhase.detachedDragging);
+            return;
+          }
+        }
 
         if (!detachTransition.active && attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
           return;
