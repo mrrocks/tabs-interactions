@@ -1,24 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { activeTabClassName, inactiveTabClassName } from './tabState';
 import { initializeTabs, setActiveTab, tabListSelector, tabSelector } from './tabs';
+import { createClassList } from '../test-helpers/domMocks';
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
-
-const createClassList = (initialClassNames = []) => {
-  const classNames = new Set(initialClassNames);
-
-  return {
-    add: (...tokens) => {
-      tokens.forEach((token) => classNames.add(token));
-    },
-    remove: (...tokens) => {
-      tokens.forEach((token) => classNames.delete(token));
-    },
-    contains: (token) => classNames.has(token)
-  };
-};
 
 const createTab = ({ classNames = [], selected = false } = {}) => {
   const attributes = new Map([['aria-selected', selected ? 'true' : 'false']]);

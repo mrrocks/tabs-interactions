@@ -1,28 +1,13 @@
 import { toFiniteNumber } from '../shared/math';
+import { safeRemoveElement } from '../shared/dom';
 import { scaleDurationMs } from '../motion/motionSpeed';
 import { tabAddSelector, tabItemSelector, tabListSelector, tabRowSelector } from '../shared/selectors';
 import { createWindowControlsElement, windowControlsSelector } from './windowControls';
 import { bringToFront } from './windowFocus';
 
-export const removePanel = (panel) => {
-  if (!panel) {
-    return false;
-  }
+export const removePanel = (panel) => safeRemoveElement(panel);
 
-  if (typeof panel.remove === 'function') {
-    panel.remove();
-    return true;
-  }
-
-  if (panel.parentNode && typeof panel.parentNode.removeChild === 'function') {
-    panel.parentNode.removeChild(panel);
-    return true;
-  }
-
-  return false;
-};
-
-const panelScaleTransitionMs = 250;
+export const panelScaleTransitionMs = 250;
 const panelDetachScale = 0.6;
 
 export const computeFrameFromTabAnchor = ({
@@ -68,13 +53,7 @@ const runPanelScaleAnimation = (panel, keyframes, onFinish) => {
   return animation;
 };
 
-export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onTabInserted, onComplete }) => {
-  if (placeholder && typeof placeholder.remove === 'function') {
-    placeholder.remove();
-  }
-  moveTabToList({ tab: draggedTab, tabList });
-  onTabInserted?.();
-
+export const animateDetachedWindowScaleIn = ({ panel, tabOffsetInPanel, tabScreenRect, frame, onComplete }) => {
   const tabCenterX = toFiniteNumber(tabOffsetInPanel.x, 0) + toFiniteNumber(tabScreenRect.width, 0) / 2;
   const tabBottomY = toFiniteNumber(tabOffsetInPanel.y, 0) + toFiniteNumber(tabScreenRect.height, 0);
   const originX = frame.width > 0 ? (tabCenterX / frame.width) * 100 : 50;
@@ -95,6 +74,16 @@ export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, place
       onComplete?.();
     }
   );
+};
+
+export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onTabInserted, onComplete }) => {
+  if (placeholder && typeof placeholder.remove === 'function') {
+    placeholder.remove();
+  }
+  moveTabToList({ tab: draggedTab, tabList });
+  onTabInserted?.();
+
+  animateDetachedWindowScaleIn({ panel, tabOffsetInPanel, tabScreenRect, frame, onComplete });
 };
 
 const createDetachedPanelElements = ({ sourcePanel, sourceTabList }) => {
@@ -177,6 +166,59 @@ const resolveAnchorOrigin = (panel, anchor) => {
   const ox = panelRect.width > 0 ? (cx / panelRect.width) * 100 : 50;
   const oy = panelRect.height > 0 ? (cy / panelRect.height) * 100 : 0;
   return `${ox}% ${oy}%`;
+};
+
+export const createDetachedWindowToggle = ({ panel, tabOffsetInPanel, frame }) => {
+  const tabCenterX = toFiniteNumber(tabOffsetInPanel.x, 0);
+  const tabBottomY = toFiniteNumber(tabOffsetInPanel.y, 0);
+  const originX = frame.width > 0 ? (tabCenterX / frame.width) * 100 : 50;
+  const originY = frame.height > 0 ? (tabBottomY / frame.height) * 100 : 0;
+
+  panel.style.transformOrigin = `${originX}% ${originY}%`;
+
+  const keyframes = [
+    { transform: 'scale(1)', opacity: '1' },
+    { transform: `scale(${panelDetachScale})`, opacity: '0' }
+  ];
+
+  const animation = panel.animate(keyframes, {
+    duration: getScaledPanelTransitionMs(),
+    easing: 'ease',
+    fill: 'forwards'
+  });
+  animation.pause();
+
+  const clearStyles = () => {
+    panel.style.pointerEvents = '';
+    panel.style.transformOrigin = '';
+    panel.style.transform = '';
+    panel.style.opacity = '';
+  };
+
+  const collapse = () => {
+    if (animation.playState === 'finished' && animation.playbackRate >= 0) return;
+    panel.style.pointerEvents = 'none';
+    animation.playbackRate = 1;
+    animation.play();
+  };
+
+  const expand = () => {
+    if (animation.playState === 'finished' && animation.playbackRate < 0) return;
+    panel.style.pointerEvents = '';
+    animation.playbackRate = -1;
+    animation.play();
+  };
+
+  const isCollapsed = () => {
+    return animation.playState === 'finished' && animation.playbackRate > 0;
+  };
+
+  const destroy = () => {
+    animation.cancel();
+    clearStyles();
+  };
+
+  return { collapse, expand, isCollapsed, destroy, animation };
 };
 
 export const animatedRemovePanel = (panel, { anchor } = {}) => {

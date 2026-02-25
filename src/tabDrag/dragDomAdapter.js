@@ -1,15 +1,17 @@
-import { toRectSnapshot } from '../shared/dom';
+import { toRectSnapshot, safeRemoveElement } from '../shared/dom';
 import { getOverlayZIndex } from '../window/windowFocus';
-
-export const createDragDomAdapter = ({
-  activeTabClassName,
+import { activeTabClassName } from '../tabs/tabState';
+import {
   dragClassName,
   activeDragClassName,
   inactiveDragClassName,
   dragSourceClassName,
   dragProxyClassName,
   noTransitionClassName
-}) => {
+} from './dragClassNames';
+import { setFlexLock, restoreDragInlineStyles } from './styleHelpers';
+
+export const createDragDomAdapter = () => {
   const setElementTransform = (element, translateX, translateY) => {
     if (!element || !element.style) {
       return;
@@ -45,18 +47,7 @@ export const createDragDomAdapter = ({
   };
 
   const removeDragProxy = (dragProxy) => {
-    if (!dragProxy) {
-      return;
-    }
-
-    if (typeof dragProxy.remove === 'function') {
-      dragProxy.remove();
-      return;
-    }
-
-    if (dragProxy.parentNode && typeof dragProxy.parentNode.removeChild === 'function') {
-      dragProxy.parentNode.removeChild(dragProxy);
-    }
+    safeRemoveElement(dragProxy);
   };
 
   const setDragProxyBaseRect = (dragState, rect) => {
@@ -88,9 +79,7 @@ export const createDragDomAdapter = ({
     const draggedRect = draggedTab.getBoundingClientRect();
     dragState.lockedTabWidthPx = draggedRect.width;
     draggedTab.style.transition = 'none';
-    draggedTab.style.flex = `0 0 ${draggedRect.width}px`;
-    draggedTab.style.minWidth = `${draggedRect.width}px`;
-    draggedTab.style.maxWidth = `${draggedRect.width}px`;
+    setFlexLock(draggedTab, draggedRect.width);
     const dragProxyState = createDragProxy(draggedTab);
 
     if (dragProxyState) {
@@ -112,14 +101,7 @@ export const createDragDomAdapter = ({
     const hadProxy = Boolean(dragState.dragProxy);
 
     draggedTab.classList.remove(dragSourceClassName, dragClassName);
-    draggedTab.style.transform = initialInlineStyles.transform;
-    draggedTab.style.transition = initialInlineStyles.transition;
-    draggedTab.style.flex = initialInlineStyles.flex;
-    draggedTab.style.flexBasis = initialInlineStyles.flexBasis;
-    draggedTab.style.minWidth = initialInlineStyles.minWidth;
-    draggedTab.style.maxWidth = initialInlineStyles.maxWidth;
-    draggedTab.style.willChange = initialInlineStyles.willChange;
-    draggedTab.style.zIndex = initialInlineStyles.zIndex;
+    restoreDragInlineStyles(draggedTab, initialInlineStyles);
 
     if (hadProxy && isInactive) {
       draggedTab.classList.add(noTransitionClassName, inactiveDragClassName);

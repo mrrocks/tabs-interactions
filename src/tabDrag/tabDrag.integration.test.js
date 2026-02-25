@@ -3,6 +3,8 @@ import { shouldCloseSourcePanelAfterTransfer } from './dragCalculations';
 import { initializeTabDrag } from './tabDrag';
 import { createLayoutPipeline } from './layoutPipeline';
 import { createDropResolver } from './dropResolver';
+import { createClassList } from '../test-helpers/domMocks';
+import { stubBrowserGlobals } from '../test-helpers/globalStubs';
 
 const tabWidth = 120;
 const tabHeight = 40;
@@ -349,38 +351,7 @@ describe('tab drag integration flows', () => {
   });
 
   it('keeps cross-window hover as preview until pointer release', () => {
-    const previousWindow = globalThis.window;
-    const previousDocument = globalThis.document;
-    const previousElement = globalThis.Element;
-
-    const createClassList = (initialNames = []) => {
-      const names = new Set(initialNames);
-      return {
-        add: (...classNames) => {
-          classNames.forEach((name) => names.add(name));
-        },
-        remove: (...classNames) => {
-          classNames.forEach((name) => names.delete(name));
-        },
-        contains: (className) => names.has(className),
-        toggle: (className, force) => {
-          if (force === true) {
-            names.add(className);
-            return true;
-          }
-          if (force === false) {
-            names.delete(className);
-            return false;
-          }
-          if (names.has(className)) {
-            names.delete(className);
-            return false;
-          }
-          names.add(className);
-          return true;
-        }
-      };
-    };
+    const globals = stubBrowserGlobals();
 
     const tabWidthPx = 120;
     const tabHeightPx = 40;
@@ -406,7 +377,7 @@ describe('tab drag integration flows', () => {
     };
 
     const createTabListStub = ({ left, top }) => {
-      const addButton = { className: 'tab--add', parentNode: null };
+      const addButton = { className: 'tab--add', parentNode: null, cloneNode: () => ({ className: 'tab--add' }) };
       const tabList = {
         left,
         top,
@@ -415,6 +386,7 @@ describe('tab drag integration flows', () => {
         children: [],
         querySelectorAll: (selector) => (selector === '.tab--item' ? getTabNodes(tabList) : []),
         querySelector: (selector) => (selector === '.tab--add' ? addButton : null),
+        getAttribute: () => null,
         getBoundingClientRect: () => {
           const width = Math.max(
             getTabNodes(tabList).reduce((total, node) => total + (node.width ?? tabWidthPx), 0),
@@ -463,6 +435,7 @@ describe('tab drag integration flows', () => {
       const getPanelWidth = () => Math.max(getTabNodes(tabList).length, 1) * tabWidthPx + 160;
       const panel = {
         tabList,
+        parentElement: null,
         style: { zIndex: String(panelStubZCounter) },
         querySelector: (selector) => {
           if (selector === '.tab--list') {
@@ -470,6 +443,7 @@ describe('tab drag integration flows', () => {
           }
           if (selector === '.tab--row') {
             return {
+              querySelector: () => null,
               getBoundingClientRect: () => ({
                 left: tabList.left,
                 right: tabList.left + Math.max(getTabNodes(tabList).length, 1) * tabWidthPx + 120,
@@ -603,6 +577,7 @@ describe('tab drag integration flows', () => {
     const createDocumentElementStub = () => {
       const element = {
         className: '',
+        classList: createClassList(),
         style: {},
         parentNode: null,
         left: 0,
@@ -610,7 +585,13 @@ describe('tab drag integration flows', () => {
         width: tabWidthPx,
         tabIndex: 0,
         setAttribute: () => {},
+        getAttribute: () => null,
         addEventListener: () => {},
+        append: () => {},
+        insertBefore: () => {},
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        cloneNode: () => createDocumentElementStub(),
         closest: (selector) => {
           if (selector === '.tab--list') {
             return element.parentNode;
@@ -637,7 +618,8 @@ describe('tab drag integration flows', () => {
           if (element.parentNode && typeof element.parentNode.removeChild === 'function') {
             element.parentNode.removeChild(element);
           }
-        }
+        },
+        animate: () => ({ addEventListener: () => {}, cancel: () => {} })
       };
       return element;
     };
@@ -683,9 +665,7 @@ describe('tab drag integration flows', () => {
     const previousRAF = globalThis.requestAnimationFrame;
     const previousCAF = globalThis.cancelAnimationFrame;
 
-    globalThis.window = windowStub;
-    globalThis.document = documentStub;
-    globalThis.Element = ElementStub;
+    globals.apply(windowStub, documentStub, ElementStub);
     globalThis.requestAnimationFrame = windowStub.requestAnimationFrame;
     globalThis.cancelAnimationFrame = windowStub.cancelAnimationFrame;
 
@@ -736,47 +716,14 @@ describe('tab drag integration flows', () => {
       ).toContain('tab-a');
       expect(getTabNodes(targetTabList).every((tab) => Boolean(tab.id))).toBe(true);
     } finally {
-      globalThis.window = previousWindow;
-      globalThis.document = previousDocument;
-      globalThis.Element = previousElement;
+      globals.restore();
       globalThis.requestAnimationFrame = previousRAF;
       globalThis.cancelAnimationFrame = previousCAF;
     }
   });
 
-  it('removes source panel after single-tab detach intent', () => {
-    const previousWindow = globalThis.window;
-    const previousDocument = globalThis.document;
-    const previousElement = globalThis.Element;
-
-    const createClassList = (initialNames = []) => {
-      const names = new Set(initialNames);
-      return {
-        add: (...classNames) => {
-          classNames.forEach((name) => names.add(name));
-        },
-        remove: (...classNames) => {
-          classNames.forEach((name) => names.delete(name));
-        },
-        contains: (className) => names.has(className),
-        toggle: (className, force) => {
-          if (force === true) {
-            names.add(className);
-            return true;
-          }
-          if (force === false) {
-            names.delete(className);
-            return false;
-          }
-          if (names.has(className)) {
-            names.delete(className);
-            return false;
-          }
-          names.add(className);
-          return true;
-        }
-      };
-    };
+  it('promotes single-tab window to detached panel on drag activation', () => {
+    const globals = stubBrowserGlobals();
 
     const windowListeners = new Map();
     const rootListeners = new Map();
@@ -809,7 +756,8 @@ describe('tab drag integration flows', () => {
       },
       cancelAnimationFrame: () => {
         queuedFrameCallback = null;
-      }
+      },
+      getComputedStyle: () => ({ minHeight: '0px' })
     };
 
     const sourcePanel = {
@@ -818,8 +766,16 @@ describe('tab drag integration flows', () => {
         height: '',
         left: '',
         top: '',
-        zIndex: '1'
+        zIndex: '1',
+        cursor: '',
+        visibility: '',
+        pointerEvents: '',
+        transformOrigin: '',
+        transform: '',
+        opacity: ''
       },
+      dataset: { resizable: '' },
+      parentElement: null,
       removed: false,
       getBoundingClientRect: () => ({
         left: 60,
@@ -830,6 +786,7 @@ describe('tab drag integration flows', () => {
       querySelector: (selector) => {
         if (selector === '.tab--row') {
           return {
+            querySelector: () => null,
             getBoundingClientRect: () => ({
               left: 60,
               right: 580,
@@ -840,16 +797,24 @@ describe('tab drag integration flows', () => {
             })
           };
         }
+        if (selector === '.tab--list') {
+          return tabList;
+        }
         return null;
       },
+      querySelectorAll: () => [],
       remove: () => {
         sourcePanel.removed = true;
-      }
+      },
+      addEventListener: () => {},
+      hasPointerCapture: () => false,
+      setPointerCapture: () => {}
     };
 
     const tabList = {
       querySelectorAll: (selector) => (selector === '.tab--item' ? [draggedTab] : []),
       querySelector: (selector) => (selector === '.tab--add' ? addButton : null),
+      getAttribute: () => null,
       getBoundingClientRect: () => ({
         left: 100,
         right: 260,
@@ -862,7 +827,7 @@ describe('tab drag integration flows', () => {
       insertBefore: () => {}
     };
 
-    const addButton = {};
+    const addButton = { cloneNode: () => ({}) };
     const dragProxy = {
       classList: createClassList(['tab--item']),
       style: {
@@ -873,7 +838,11 @@ describe('tab drag integration flows', () => {
         minWidth: '',
         maxWidth: '',
         transform: '',
-        willChange: ''
+        willChange: '',
+        zIndex: '',
+        transition: '',
+        visibility: '',
+        pointerEvents: ''
       },
       getBoundingClientRect: () => ({
         left: 100,
@@ -881,7 +850,10 @@ describe('tab drag integration flows', () => {
         width: 120,
         height: 40
       }),
-      remove: () => {}
+      querySelector: () => null,
+      remove: () => {},
+      animate: () => ({ addEventListener: () => {}, cancel: () => {} }),
+      getAnimations: () => []
     };
 
     const draggedTab = {
@@ -889,13 +861,17 @@ describe('tab drag integration flows', () => {
         transform: '',
         transition: '',
         flex: '',
+        flexBasis: '',
         minWidth: '',
         maxWidth: '',
         willChange: '',
-        zIndex: ''
+        zIndex: '',
+        visibility: ''
       },
+      tabIndex: 0,
       classList: createClassList(['tab--item', 'tab--active']),
       parentNode: tabList,
+      setAttribute: () => {},
       getBoundingClientRect: () => ({
         left: 100,
         top: 320,
@@ -916,7 +892,9 @@ describe('tab drag integration flows', () => {
         return null;
       },
       setPointerCapture: () => {},
-      releasePointerCapture: () => {}
+      releasePointerCapture: () => {},
+      querySelector: () => null,
+      animate: () => ({ addEventListener: () => {}, cancel: () => {} })
     };
 
     const documentStub = {
@@ -925,8 +903,24 @@ describe('tab drag integration flows', () => {
           userSelect: ''
         },
         classList: createClassList(),
+        appendChild: () => {},
         append: () => {}
       },
+      createElement: () => ({
+        className: '',
+        style: {},
+        children: [],
+        parentNode: null,
+        setAttribute: () => {},
+        getAttribute: () => null,
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        append: () => {},
+        insertBefore: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }),
+        remove: () => {},
+        animate: () => ({ addEventListener: () => {}, cancel: () => {} })
+      }),
       querySelectorAll: (selector) => {
         if (selector === '.tab--list') return [tabList];
         if (selector === '.browser') return [sourcePanel];
@@ -945,9 +939,7 @@ describe('tab drag integration flows', () => {
 
     class ElementStub {}
 
-    globalThis.window = windowStub;
-    globalThis.document = documentStub;
-    globalThis.Element = ElementStub;
+    globals.apply(windowStub, documentStub, ElementStub);
 
     try {
       initializeTabDrag({ root });
@@ -958,30 +950,24 @@ describe('tab drag integration flows', () => {
         clientX: 120,
         clientY: 340
       });
+
+      expect(windowListeners.has('pointermove')).toBe(true);
+
       windowListeners.get('pointermove')({
         pointerId: 1,
-        clientX: 126,
-        clientY: 344
-      });
-      flushAnimationFrame();
-      windowListeners.get('pointermove')({
-        pointerId: 1,
-        clientX: 126,
-        clientY: 412
-      });
-      flushAnimationFrame();
-      windowListeners.get('pointermove')({
-        pointerId: 1,
-        clientX: 126,
-        clientY: 456
+        clientX: 140,
+        clientY: 340
       });
       flushAnimationFrame();
 
-      expect(sourcePanel.removed).toBe(true);
+      expect(sourcePanel.style.left).not.toBe('');
     } finally {
-      globalThis.window = previousWindow;
-      globalThis.document = previousDocument;
-      globalThis.Element = previousElement;
+      windowListeners.get('pointerup')?.({
+        pointerId: 1,
+        clientX: 140,
+        clientY: 340
+      });
+      globals.restore();
     }
   });
 });

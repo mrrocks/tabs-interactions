@@ -1,3 +1,4 @@
+import { onAnimationSettled } from '../shared/dom';
 import { dragTransitionDurationMs, dragTransitionEasing } from './dragAnimationConfig';
 
 export const createAnimationCoordinator = ({
@@ -75,6 +76,7 @@ export const createAnimationCoordinator = ({
     dragProxy,
     draggedTab,
     toRectSnapshot,
+    settleTargetRect,
     setDragProxyBaseRect,
     setElementTransform
   }) => {
@@ -83,7 +85,7 @@ export const createAnimationCoordinator = ({
     }
 
     const proxyRect = toRectSnapshot(dragProxy.getBoundingClientRect());
-    const targetRect = toRectSnapshot(draggedTab.getBoundingClientRect());
+    const targetRect = settleTargetRect ?? toRectSnapshot(draggedTab.getBoundingClientRect());
     const settleDelta = getProxySettleDelta({
       proxyRect,
       targetRect
@@ -114,30 +116,10 @@ export const createAnimationCoordinator = ({
     );
   };
 
-  const finalizeOnAnimationSettled = (animation, onSettled) => {
-    if (!animation || typeof animation.addEventListener !== 'function') {
-      onSettled();
-      return;
-    }
-
-    let didSettle = false;
-    const settle = () => {
-      if (didSettle) {
-        return;
-      }
-
-      didSettle = true;
-      onSettled();
-    };
-
-    animation.addEventListener('finish', settle);
-    animation.addEventListener('cancel', settle);
-  };
-
   return {
     animateProxySettleToTarget,
     animateSiblingDisplacement,
     cancelAllSiblingAnimations,
-    finalizeOnAnimationSettled
+    finalizeOnAnimationSettled: onAnimationSettled
   };
 };

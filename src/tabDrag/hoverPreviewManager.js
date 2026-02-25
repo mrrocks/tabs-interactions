@@ -1,3 +1,5 @@
+import { safeRemoveElement } from '../shared/dom';
+
 export const createHoverPreviewManager = ({
   tabItemClassName,
   dragHoverPreviewClassName
@@ -15,15 +17,7 @@ export const createHoverPreviewManager = ({
       return;
     }
 
-    if (typeof previewTab.remove === 'function') {
-      previewTab.remove();
-    } else if (
-      previewTab.parentNode &&
-      typeof previewTab.parentNode.removeChild === 'function'
-    ) {
-      previewTab.parentNode.removeChild(previewTab);
-    }
-
+    safeRemoveElement(previewTab);
     detach();
   };
 
@@ -41,6 +35,9 @@ export const createHoverPreviewManager = ({
     tab.style.opacity = '0';
     tab.style.pointerEvents = 'none';
     tab.style.transition = 'none';
+    tab.style.overflow = 'hidden';
+    tab.style.padding = '0';
+    tab.style.gap = '0';
     tab.style.flex = '0 1 var(--tab-default-width)';
     tab.style.minWidth = '0';
     tab.style.maxWidth = '0';
@@ -48,6 +45,11 @@ export const createHoverPreviewManager = ({
     previewTab = tab;
     previewTabList = tabList;
     return tab;
+  };
+
+  const restore = (tab, tabList) => {
+    previewTab = tab;
+    previewTabList = tabList;
   };
 
   const commitDrop = ({ draggedTab, attachTargetTabList }) => {
@@ -76,6 +78,7 @@ export const createHoverPreviewManager = ({
     clear,
     commitDrop,
     createAndAttach,
-    detach
+    detach,
+    restore
   };
 };

@@ -1,5 +1,6 @@
 import { toFiniteNumber } from '../shared/math';
-import { resolveHoverPreviewWidthPx } from './dragCalculations';
+import { onAnimationSettled } from '../shared/dom';
+import { resolveHoverPreviewWidthPx, snapshotSiblingPositions, computeDisplacements } from './dragCalculations';
 import { dragTransitionEasing } from './dragAnimationConfig';
 
 const ANIMATION_META_PROPS = new Set(['offset', 'easing', 'composite', 'computedOffset']);
@@ -10,6 +11,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
   let committedWidthPx = 0;
   let lastProxyTargetWidthPx = 0;
   let lastTabTargetWidthPx = 0;
+
+  let outgoingPreviewTab = null;
+  let outgoingTabList = null;
+  let outgoingAnimation = null;
+  let outgoingStartWidthPx = 0;
+  const reclaimedPreviews = new WeakSet();
 
   const makeAnimOptions = () => ({
     duration: scaleDurationMs(hoverPreviewExpandDurationMs),
@@ -35,6 +42,13 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
         target.style[prop] = last[prop];
       }
     }
+  };
+
+  const clearOutgoing = () => {
+    outgoingPreviewTab = null;
+    outgoingTabList = null;
+    outgoingAnimation = null;
+    outgoingStartWidthPx = 0;
   };
 
   const cancelAll = () => {
@@ -105,6 +119,16 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     );
   };
 
+  const measureNaturalWidthInList = (previewTab) => {
+    const saved = { minWidth: previewTab.style.minWidth, maxWidth: previewTab.style.maxWidth };
+    previewTab.style.minWidth = '';
+    previewTab.style.maxWidth = '';
+    const width = toFiniteNumber(previewTab.getBoundingClientRect().width, 0);
+    previewTab.style.minWidth = saved.minWidth;
+    previewTab.style.maxWidth = saved.maxWidth;
+    return width;
+  };
+
   const animateIn = (session, previewTab, { fromWidthPx = 0 } = {}) => {
     if (!previewTab || !session) {
       return { displacements: [] };
@@ -112,26 +136,25 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
     cancelAll();
 
-    const siblings = getSiblings(previewTab);
-    const beforeLeftMap = new Map(siblings.map((s) => [s, s.getBoundingClientRect().left]));
-
-    previewTab.style.minWidth = '';
-    previewTab.style.maxWidth = '';
-    previewTab.style.flex = '';
-
-    const settledWidthPx = previewTab.getBoundingClientRect().width;
+    const naturalWidthPx = previewTab.parentNode ? measureNaturalWidthInList(previewTab) : 0;
+    const fallbackWidthPx = resolveHoverPreviewWidthPx({
+      dragProxyBaseRect: session.dragProxyBaseRect,
+      draggedTab: session.draggedTab
+    });
+    const settledWidthPx = naturalWidthPx > 0 ? naturalWidthPx : fallbackWidthPx;
     if (settledWidthPx <= 0) {
       return { displacements: [] };
     }
+
+    const siblings = getSiblings(previewTab);
+    const snapshot = snapshotSiblingPositions(siblings);
 
     const startWidthPx = Math.min(toFiniteNumber(fromWidthPx, 0), settledWidthPx);
 
     previewTab.style.minWidth = `${startWidthPx}px`;
     previewTab.style.maxWidth = `${startWidthPx}px`;
 
-    const displacements = siblings
-      .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
-      .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
+    const displacements = computeDisplacements(siblings, snapshot);
 
     committedWidthPx = settledWidthPx;
     const animOptions = makeAnimOptions();
@@ -174,6 +197,10 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     previewTab.style.minWidth = `${currentWidth}px`;
     previewTab.style.maxWidth = `${currentWidth}px`;
 
+    outgoingPreviewTab = previewTab;
+    outgoingTabList = tabList;
+    outgoingStartWidthPx = currentWidth;
+
     const anim = previewTab.animate(
       [
         { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
@@ -182,24 +209,58 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       makeAnimOptions()
     );
 
+    outgoingAnimation = anim;
+
     const onDone = () => {
+      if (outgoingPreviewTab === previewTab) {
+        clearOutgoing();
+      }
+      if (reclaimedPreviews.has(previewTab)) {
+        return;
+      }
+
       const siblings = tabList
         ? Array.from(tabList.children).filter((el) => el !== previewTab && el.classList?.contains(tabItemClassName))
         : [];
-      const beforeLeftMap = new Map(siblings.map((s) => [s, s.getBoundingClientRect().left]));
+      const snapshot = snapshotSiblingPositions(siblings);
 
       previewTab.remove();
 
-      const displacements = siblings
-        .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
-        .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
-
       if (typeof onRemoved === 'function') {
-        onRemoved(displacements);
+        onRemoved(computeDisplacements(siblings, snapshot));
       }
     };
-    anim.addEventListener('finish', onDone);
-    anim.addEventListener('cancel', onDone);
+    onAnimationSettled(anim, onDone);
+  };
+
+  const reclaimOutgoing = (targetTabList) => {
+    if (!outgoingPreviewTab || outgoingTabList !== targetTabList) {
+      return null;
+    }
+
+    if (!outgoingPreviewTab.parentNode) {
+      clearOutgoing();
+      return null;
+    }
+
+    const preview = outgoingPreviewTab;
+    const anim = outgoingAnimation;
+
+    const currentWidth = toFiniteNumber(preview.getBoundingClientRect?.().width, 0);
+
+    reclaimedPreviews.add(preview);
+    clearOutgoing();
+
+    if (anim) {
+      anim.cancel();
+    }
+
+    if (currentWidth > 0) {
+      preview.style.minWidth = `${currentWidth}px`;
+      preview.style.maxWidth = `${currentWidth}px`;
+    }
+
+    return { previewTab: preview, currentWidthPx: currentWidth };
   };
 
   const syncWidth = (session, previewTab) => {
@@ -290,11 +351,14 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
   return {
     get animatingIn() { return animatingIn; },
+    get outgoingPreviewTab() { return outgoingPreviewTab; },
+    get outgoingTabList() { return outgoingTabList; },
     animateIn,
     animateOut,
     animateToBaseWidth,
     animateToDetachedWidth,
     cancelAll,
+    reclaimOutgoing,
     reset,
     syncWidth
   };

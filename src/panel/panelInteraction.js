@@ -5,7 +5,16 @@ import {
   getResizedFrame
 } from './panelResize';
 import { computePanelMinWidth } from './panelMinWidth';
-import { tabItemSelector, tabAddSelector, windowControlsSelector } from '../shared/selectors';
+import {
+  resolveEdgeSnapZone,
+  computeSnappedFrame,
+  createEdgeSnapPreview,
+  animatePanelToSnappedFrame,
+  snappedPanelFrames
+} from './panelEdgeSnap';
+import { tabItemSelector, tabAddSelector, tabCloseSelector, windowControlsSelector } from '../shared/selectors';
+import { toFiniteNumber } from '../shared/math';
+import { createPointerFrameLoop } from '../shared/pointerFrameLoop';
 
 const resizeHitArea = 10;
 const grabCursor = 'grab';
@@ -25,14 +34,11 @@ export const initializePanelInteraction = (panel) => {
   initializedPanels.add(panel);
 
   let interactionState = null;
-  let frameRequestId = 0;
   let panelFrame = null;
-  let queuedClientX = 0;
-  let queuedClientY = 0;
-  let hasQueuedPointer = false;
   let activeCursor = '';
   let panelMinWidth = 0;
   let panelMinHeight = 0;
+  let edgeSnapPreview = null;
 
   const setCursor = (nextCursor) => {
     if (activeCursor === nextCursor) {
@@ -54,15 +60,9 @@ export const initializePanelInteraction = (panel) => {
     };
   };
 
-  const parsePixels = (value) => {
-    const parsedValue = Number.parseFloat(value);
-
-    return Number.isFinite(parsedValue) ? parsedValue : 0;
-  };
-
   const readPanelMinHeight = () => {
     const styles = window.getComputedStyle(panel);
-    return parsePixels(styles.minHeight);
+    return toFiniteNumber(parseFloat(styles.minHeight));
   };
 
   const setPanelFrame = (nextFrame) => {
@@ -122,57 +122,35 @@ export const initializePanelInteraction = (panel) => {
     return direction;
   };
 
-  const applyInteractionSample = () => {
-    if (!panelFrame || !interactionState || !hasQueuedPointer) {
-      return;
-    }
+  const pointerLoop = createPointerFrameLoop({
+    onSample(clientX, clientY) {
+      if (!panelFrame || !interactionState || !pointerLoop.hasQueued) return;
 
-    if (interactionState.mode === 'resize') {
-      const frame = getResizedFrame({
-        ...interactionState,
-        clientX: queuedClientX,
-        clientY: queuedClientY,
-        minWidth: panelMinWidth,
-        minHeight: panelMinHeight
+      if (interactionState.mode === 'resize') {
+        setPanelFrame(getResizedFrame({
+          ...interactionState,
+          clientX,
+          clientY,
+          minWidth: panelMinWidth,
+          minHeight: panelMinHeight
+        }));
+        return;
+      }
+
+      setPanelFrame({
+        ...panelFrame,
+        ...getDraggedFrame({ ...interactionState, clientX, clientY })
       });
 
-      setPanelFrame(frame);
-      return;
+      const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
+      if (snapZone) {
+        if (!edgeSnapPreview) edgeSnapPreview = createEdgeSnapPreview();
+        edgeSnapPreview.show(snapZone);
+      } else if (edgeSnapPreview) {
+        edgeSnapPreview.hide();
+      }
     }
-
-    const dragFrame = getDraggedFrame({
-      ...interactionState,
-      clientX: queuedClientX,
-      clientY: queuedClientY
-    });
-
-    setPanelFrame({
-      ...panelFrame,
-      ...dragFrame
-    });
-  };
-
-  const processInteractionFrame = () => {
-    frameRequestId = 0;
-    applyInteractionSample();
-  };
-
-  const scheduleInteractionFrame = () => {
-    if (frameRequestId !== 0) {
-      return;
-    }
-
-    frameRequestId = window.requestAnimationFrame(processInteractionFrame);
-  };
-
-  const flushInteractionFrame = () => {
-    if (frameRequestId !== 0) {
-      window.cancelAnimationFrame(frameRequestId);
-      frameRequestId = 0;
-    }
-
-    applyInteractionSample();
-  };
+  });
 
   const clearInteractionListeners = () => {
     window.removeEventListener('pointermove', onPointerMove);
@@ -181,33 +159,42 @@ export const initializePanelInteraction = (panel) => {
   };
 
   const onPointerMove = (event) => {
-    if (!interactionState || event.pointerId !== interactionState.pointerId) {
-      return;
-    }
-
-    queuedClientX = event.clientX;
-    queuedClientY = event.clientY;
-    hasQueuedPointer = true;
-
-    scheduleInteractionFrame();
+    if (!interactionState || event.pointerId !== interactionState.pointerId) return;
+    pointerLoop.queue(event.clientX, event.clientY);
+    pointerLoop.schedule();
   };
 
   const onPointerUp = (event) => {
-    if (!interactionState || event.pointerId !== interactionState.pointerId) {
-      return;
-    }
+    if (!interactionState || event.pointerId !== interactionState.pointerId) return;
 
-    queuedClientX = event.clientX;
-    queuedClientY = event.clientY;
-    hasQueuedPointer = true;
-    flushInteractionFrame();
+    const wasDrag = interactionState.mode === 'drag';
+
+    pointerLoop.queue(event.clientX, event.clientY);
+    pointerLoop.flush();
 
     if (panel.hasPointerCapture(event.pointerId)) {
       panel.releasePointerCapture(event.pointerId);
     }
 
+    if (wasDrag && edgeSnapPreview?.activeZone) {
+      const zone = edgeSnapPreview.activeZone;
+      const preSnapFrame = snappedPanelFrames.get(panel) ?? { ...panelFrame };
+      snappedPanelFrames.set(panel, preSnapFrame);
+      const targetFrame = computeSnappedFrame(zone, window.innerWidth, window.innerHeight);
+      animatePanelToSnappedFrame(panel, targetFrame, () => {
+        panelFrame = { ...targetFrame };
+      });
+    } else if (wasDrag) {
+      snappedPanelFrames.delete(panel);
+    }
+
+    if (edgeSnapPreview) {
+      edgeSnapPreview.destroy();
+      edgeSnapPreview = null;
+    }
+
     interactionState = null;
-    hasQueuedPointer = false;
+    pointerLoop.reset();
     document.body.style.userSelect = '';
     updatePointerDirection(event.clientX, event.clientY);
     clearInteractionListeners();
@@ -234,18 +221,35 @@ export const initializePanelInteraction = (panel) => {
       return;
     }
 
-    if (
-      event.target instanceof Element &&
-      (event.target.closest(tabItemSelector) || event.target.closest(windowControlsSelector) || event.target.closest(tabAddSelector))
-    ) {
-      return;
+    if (event.target instanceof Element) {
+      if (event.target.closest(windowControlsSelector) || event.target.closest(tabAddSelector) || event.target.closest(tabCloseSelector) || event.target.closest(tabItemSelector)) {
+        return;
+      }
     }
 
+    panelFrame = readPanelFrame();
     const direction = updatePointerDirection(event.clientX, event.clientY);
     event.preventDefault();
 
     if (direction) {
       panelMinWidth = computePanelMinWidth(panel);
+    }
+
+    const preSnap = !direction ? snappedPanelFrames.get(panel) : null;
+    if (preSnap) {
+      const restoredLeft = event.clientX - preSnap.width / 2;
+      const restoredTop = event.clientY;
+      const restoredFrame = {
+        width: preSnap.width,
+        height: preSnap.height,
+        left: restoredLeft,
+        top: restoredTop
+      };
+      animatePanelToSnappedFrame(panel, restoredFrame, () => {
+        panelFrame = { ...restoredFrame };
+      });
+      panelFrame = restoredFrame;
+      snappedPanelFrames.delete(panel);
     }
 
     interactionState = {
@@ -259,9 +263,7 @@ export const initializePanelInteraction = (panel) => {
       startLeft: panelFrame.left,
       startTop: panelFrame.top
     };
-    queuedClientX = event.clientX;
-    queuedClientY = event.clientY;
-    hasQueuedPointer = true;
+    pointerLoop.queue(event.clientX, event.clientY);
 
     panel.setPointerCapture(event.pointerId);
     document.body.style.userSelect = 'none';
