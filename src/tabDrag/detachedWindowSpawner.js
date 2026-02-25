@@ -12,12 +12,13 @@ import {
   resolveSourceActivationIndexAfterDetach
 } from './dragCalculations';
 import { clearDragInlineStyles, applyProxyAttachedStyle } from './styleHelpers';
-
-const dragClassName = 'tab--dragging';
-const activeDragClassName = 'tab--dragging-active';
-const inactiveDragClassName = 'tab--dragging-inactive';
-const dragSourceClassName = 'tab--drag-source';
-const noTransitionClassName = 'tab--no-transition';
+import {
+  dragClassName,
+  activeDragClassName,
+  inactiveDragClassName,
+  dragSourceClassName,
+  noTransitionClassName
+} from './dragClassNames';
 
 export const captureSourceActivation = (draggedTab, sourceTabList) => {
   if (!draggedTab.classList.contains(activeTabClassName)) {

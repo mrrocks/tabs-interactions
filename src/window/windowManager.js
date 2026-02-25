@@ -1,26 +1,11 @@
 import { toFiniteNumber } from '../shared/math';
+import { safeRemoveElement } from '../shared/dom';
 import { scaleDurationMs } from '../motion/motionSpeed';
 import { tabAddSelector, tabItemSelector, tabListSelector, tabRowSelector } from '../shared/selectors';
 import { createWindowControlsElement, windowControlsSelector } from './windowControls';
 import { bringToFront } from './windowFocus';
 
-export const removePanel = (panel) => {
-  if (!panel) {
-    return false;
-  }
-
-  if (typeof panel.remove === 'function') {
-    panel.remove();
-    return true;
-  }
-
-  if (panel.parentNode && typeof panel.parentNode.removeChild === 'function') {
-    panel.parentNode.removeChild(panel);
-    return true;
-  }
-
-  return false;
-};
+export const removePanel = (panel) => safeRemoveElement(panel);
 
 const panelScaleTransitionMs = 250;
 const panelDetachScale = 0.6;

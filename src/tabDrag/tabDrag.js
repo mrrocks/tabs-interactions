@@ -51,15 +51,12 @@ import {
   resolveEdgeSnapZone,
   createEdgeSnapPreview
 } from '../panel/panelEdgeSnap';
+import {
+  dragSourceClassName,
+  dragHoverPreviewClassName,
+  bodyDraggingClassName
+} from './dragClassNames';
 
-const dragClassName = 'tab--dragging';
-const activeDragClassName = 'tab--dragging-active';
-const inactiveDragClassName = 'tab--dragging-inactive';
-const dragSourceClassName = 'tab--drag-source';
-const dragProxyClassName = 'tab--drag-proxy';
-const noTransitionClassName = 'tab--no-transition';
-const dragHoverPreviewClassName = 'tab--drag-hover-preview';
-const bodyDraggingClassName = 'body--tab-dragging';
 const initializedRoots = new WeakSet();
 
 const getDetachReferenceRect = (tabList) => {
@@ -101,15 +98,7 @@ export const initializeTabDrag = ({
 
   initializedRoots.add(root);
 
-  const dragDomAdapter = createDragDomAdapter({
-    activeTabClassName,
-    dragClassName,
-    activeDragClassName,
-    inactiveDragClassName,
-    dragSourceClassName,
-    dragProxyClassName,
-    noTransitionClassName
-  });
+  const dragDomAdapter = createDragDomAdapter();
   const animationCoordinator = createAnimationCoordinator({
     scaleDurationMs,
     getProxySettleDelta,
@@ -310,6 +299,16 @@ export const initializeTabDrag = ({
     getCtx: () => ctx
   };
 
+  const syncEdgeSnapPreview = (clientX) => {
+    const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
+    if (snapZone) {
+      if (!ctx.detachEdgeSnapPreview) ctx.detachEdgeSnapPreview = createEdgeSnapPreview();
+      ctx.detachEdgeSnapPreview.show(snapZone);
+    } else if (ctx.detachEdgeSnapPreview) {
+      ctx.detachEdgeSnapPreview.hide();
+    }
+  };
+
   const syncDetachedPanelToProxy = (clientX) => {
     if (!ctx || !ctx.detachedPanel) {
       return;
@@ -323,13 +322,7 @@ export const initializeTabDrag = ({
     frame.top = proxyRect.top - offset.y;
     applyPanelFrame(ctx.detachedPanel, frame);
 
-    const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
-    if (snapZone) {
-      if (!ctx.detachEdgeSnapPreview) ctx.detachEdgeSnapPreview = createEdgeSnapPreview();
-      ctx.detachEdgeSnapPreview.show(snapZone);
-    } else if (ctx.detachEdgeSnapPreview) {
-      ctx.detachEdgeSnapPreview.hide();
-    }
+    syncEdgeSnapPreview(clientX);
   };
 
   const attachToHoveredTabListFromAttachedDrag = (clientX, clientY) => {
@@ -612,13 +605,7 @@ export const initializeTabDrag = ({
           frame.top = clientY - ctx.detachedPointerOffset.y;
           applyPanelFrame(ctx.detachedPanel, frame);
 
-          const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
-          if (snapZone) {
-            if (!ctx.detachEdgeSnapPreview) ctx.detachEdgeSnapPreview = createEdgeSnapPreview();
-            ctx.detachEdgeSnapPreview.show(snapZone);
-          } else if (ctx.detachEdgeSnapPreview) {
-            ctx.detachEdgeSnapPreview.hide();
-          }
+          syncEdgeSnapPreview(clientX);
         }
 
         if (!detachTransition.active) {

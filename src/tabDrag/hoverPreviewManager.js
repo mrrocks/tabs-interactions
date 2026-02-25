@@ -1,3 +1,5 @@
+import { safeRemoveElement } from '../shared/dom';
+
 export const createHoverPreviewManager = ({
   tabItemClassName,
   dragHoverPreviewClassName
@@ -15,15 +17,7 @@ export const createHoverPreviewManager = ({
       return;
     }
 
-    if (typeof previewTab.remove === 'function') {
-      previewTab.remove();
-    } else if (
-      previewTab.parentNode &&
-      typeof previewTab.parentNode.removeChild === 'function'
-    ) {
-      previewTab.parentNode.removeChild(previewTab);
-    }
-
+    safeRemoveElement(previewTab);
     detach();
   };
 

@@ -1,5 +1,6 @@
 import { toFiniteNumber } from '../shared/math';
-import { resolveHoverPreviewWidthPx } from './dragCalculations';
+import { onAnimationSettled } from '../shared/dom';
+import { resolveHoverPreviewWidthPx, snapshotSiblingPositions, computeDisplacements } from './dragCalculations';
 import { dragTransitionEasing } from './dragAnimationConfig';
 
 const ANIMATION_META_PROPS = new Set(['offset', 'easing', 'composite', 'computedOffset']);
@@ -113,7 +114,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     cancelAll();
 
     const siblings = getSiblings(previewTab);
-    const beforeLeftMap = new Map(siblings.map((s) => [s, s.getBoundingClientRect().left]));
+    const snapshot = snapshotSiblingPositions(siblings);
 
     previewTab.style.minWidth = '';
     previewTab.style.maxWidth = '';
@@ -129,9 +130,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     previewTab.style.minWidth = `${startWidthPx}px`;
     previewTab.style.maxWidth = `${startWidthPx}px`;
 
-    const displacements = siblings
-      .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
-      .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
+    const displacements = computeDisplacements(siblings, snapshot);
 
     committedWidthPx = settledWidthPx;
     const animOptions = makeAnimOptions();
@@ -186,20 +185,15 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       const siblings = tabList
         ? Array.from(tabList.children).filter((el) => el !== previewTab && el.classList?.contains(tabItemClassName))
         : [];
-      const beforeLeftMap = new Map(siblings.map((s) => [s, s.getBoundingClientRect().left]));
+      const snapshot = snapshotSiblingPositions(siblings);
 
       previewTab.remove();
 
-      const displacements = siblings
-        .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
-        .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
-
       if (typeof onRemoved === 'function') {
-        onRemoved(displacements);
+        onRemoved(computeDisplacements(siblings, snapshot));
       }
     };
-    anim.addEventListener('finish', onDone);
-    anim.addEventListener('cancel', onDone);
+    onAnimationSettled(anim, onDone);
   };
 
   const syncWidth = (session, previewTab) => {

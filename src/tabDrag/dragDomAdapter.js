@@ -1,16 +1,17 @@
-import { toRectSnapshot } from '../shared/dom';
+import { toRectSnapshot, safeRemoveElement } from '../shared/dom';
 import { getOverlayZIndex } from '../window/windowFocus';
-import { setFlexLock, restoreDragInlineStyles } from './styleHelpers';
-
-export const createDragDomAdapter = ({
-  activeTabClassName,
+import { activeTabClassName } from '../tabs/tabState';
+import {
   dragClassName,
   activeDragClassName,
   inactiveDragClassName,
   dragSourceClassName,
   dragProxyClassName,
   noTransitionClassName
-}) => {
+} from './dragClassNames';
+import { setFlexLock, restoreDragInlineStyles } from './styleHelpers';
+
+export const createDragDomAdapter = () => {
   const setElementTransform = (element, translateX, translateY) => {
     if (!element || !element.style) {
       return;
@@ -46,18 +47,7 @@ export const createDragDomAdapter = ({
   };
 
   const removeDragProxy = (dragProxy) => {
-    if (!dragProxy) {
-      return;
-    }
-
-    if (typeof dragProxy.remove === 'function') {
-      dragProxy.remove();
-      return;
-    }
-
-    if (dragProxy.parentNode && typeof dragProxy.parentNode.removeChild === 'function') {
-      dragProxy.parentNode.removeChild(dragProxy);
-    }
+    safeRemoveElement(dragProxy);
   };
 
   const setDragProxyBaseRect = (dragState, rect) => {

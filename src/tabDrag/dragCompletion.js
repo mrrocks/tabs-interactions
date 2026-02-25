@@ -10,7 +10,9 @@ import {
   resolveDropAttachTarget,
   resolveDropDetachIntent,
   shouldCloseSourcePanelAfterTransfer,
-  shouldDetachOnDrop
+  shouldDetachOnDrop,
+  snapshotSiblingPositions,
+  computeDisplacements
 } from './dragCalculations';
 import { animateDragShadowOut } from './dragShadowAnimation';
 import { dragTransitionDurationMs, dragShadowOutDurationMs } from './dragAnimationConfig';
@@ -21,8 +23,7 @@ import {
   animatePanelToSnappedFrame,
   snappedPanelFrames
 } from '../panel/panelEdgeSnap';
-
-const activeDragClassName = 'tab--dragging-active';
+import { activeDragClassName } from './dragClassNames';
 
 export const settleDetachedDrag = (completedState, deps) => {
   const { dragDomAdapter, hoverPreview, animationCoordinator, visualWidth } = deps;
@@ -127,13 +128,11 @@ export const settleAttachedDrag = (completedState, deps) => {
     const siblings = tabList
       ? getTabs(tabList).filter((t) => t !== completedState.draggedTab)
       : [];
-    const beforeLeftMap = new Map(siblings.map((t) => [t, t.getBoundingClientRect().left]));
+    const snapshot = snapshotSiblingPositions(siblings);
 
     dragDomAdapter.cleanupVisualState(completedState);
 
-    const displacements = siblings
-      .map((tab) => ({ tab, deltaX: beforeLeftMap.get(tab) - tab.getBoundingClientRect().left }))
-      .filter(({ deltaX }) => Math.abs(deltaX) >= 0.5);
+    const displacements = computeDisplacements(siblings, snapshot);
     if (displacements.length > 0) {
       animationCoordinator.animateSiblingDisplacement(displacements);
     }

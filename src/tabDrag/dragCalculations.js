@@ -153,3 +153,11 @@ export const resolveDetachedTabWidth = (panel) => {
   }
   return parseFloat(getComputedStyle(panel).getPropertyValue('--tab-default-width')) || 0;
 };
+
+export const snapshotSiblingPositions = (siblings) =>
+  new Map(siblings.map((el) => [el, el.getBoundingClientRect().left]));
+
+export const computeDisplacements = (siblings, snapshot, threshold = 0.5) =>
+  siblings
+    .map((tab) => ({ tab, deltaX: snapshot.get(tab) - tab.getBoundingClientRect().left }))
+    .filter(({ deltaX }) => Math.abs(deltaX) >= threshold);

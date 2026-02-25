@@ -1,3 +1,4 @@
+import { onAnimationSettled } from '../shared/dom';
 import { dragTransitionDurationMs, dragTransitionEasing } from './dragAnimationConfig';
 
 export const createAnimationCoordinator = ({
@@ -114,30 +115,10 @@ export const createAnimationCoordinator = ({
     );
   };
 
-  const finalizeOnAnimationSettled = (animation, onSettled) => {
-    if (!animation || typeof animation.addEventListener !== 'function') {
-      onSettled();
-      return;
-    }
-
-    let didSettle = false;
-    const settle = () => {
-      if (didSettle) {
-        return;
-      }
-
-      didSettle = true;
-      onSettled();
-    };
-
-    animation.addEventListener('finish', settle);
-    animation.addEventListener('cancel', settle);
-  };
-
   return {
     animateProxySettleToTarget,
     animateSiblingDisplacement,
     cancelAllSiblingAnimations,
-    finalizeOnAnimationSettled
+    finalizeOnAnimationSettled: onAnimationSettled
   };
 };
