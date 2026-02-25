@@ -183,6 +183,57 @@ const resolveAnchorOrigin = (panel, anchor) => {
   return `${ox}% ${oy}%`;
 };
 
+export const createDetachedWindowToggle = ({ panel, tabOffsetInPanel, frame }) => {
+  const tabCenterX = toFiniteNumber(tabOffsetInPanel.x, 0);
+  const tabBottomY = toFiniteNumber(tabOffsetInPanel.y, 0);
+  const originX = frame.width > 0 ? (tabCenterX / frame.width) * 100 : 50;
+  const originY = frame.height > 0 ? (tabBottomY / frame.height) * 100 : 0;
+
+  panel.style.transformOrigin = `${originX}% ${originY}%`;
+
+  const keyframes = [
+    { transform: 'scale(1)', opacity: '1' },
+    { transform: `scale(${panelDetachScale})`, opacity: '0' }
+  ];
+
+  const animation = panel.animate(keyframes, {
+    duration: getScaledPanelTransitionMs(),
+    easing: 'ease',
+    fill: 'forwards'
+  });
+  animation.pause();
+
+  const clearStyles = () => {
+    panel.style.pointerEvents = '';
+    panel.style.transformOrigin = '';
+    panel.style.transform = '';
+    panel.style.opacity = '';
+  };
+
+  const collapse = () => {
+    panel.style.pointerEvents = 'none';
+    animation.playbackRate = 1;
+    animation.play();
+  };
+
+  const expand = () => {
+    panel.style.pointerEvents = '';
+    animation.playbackRate = -1;
+    animation.play();
+  };
+
+  const isCollapsed = () => {
+    return animation.playState === 'finished' && animation.playbackRate > 0;
+  };
+
+  const destroy = () => {
+    animation.cancel();
+    clearStyles();
+  };
+
+  return { collapse, expand, isCollapsed, destroy, animation };
+};
+
 export const animatedRemovePanel = (panel, { anchor } = {}) => {
   if (!panel) {
     return false;

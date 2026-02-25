@@ -755,7 +755,7 @@ describe('tab drag integration flows', () => {
     }
   });
 
-  it('skips tab drag for single-tab windows', () => {
+  it('promotes single-tab window to detached panel on drag activation', () => {
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
@@ -820,7 +820,8 @@ describe('tab drag integration flows', () => {
       },
       cancelAnimationFrame: () => {
         queuedFrameCallback = null;
-      }
+      },
+      getComputedStyle: () => ({ minHeight: '0px' })
     };
 
     const sourcePanel = {
@@ -829,8 +830,15 @@ describe('tab drag integration flows', () => {
         height: '',
         left: '',
         top: '',
-        zIndex: '1'
+        zIndex: '1',
+        cursor: '',
+        visibility: '',
+        pointerEvents: '',
+        transformOrigin: '',
+        transform: '',
+        opacity: ''
       },
+      dataset: { resizable: '' },
       parentElement: null,
       removed: false,
       getBoundingClientRect: () => ({
@@ -858,9 +866,13 @@ describe('tab drag integration flows', () => {
         }
         return null;
       },
+      querySelectorAll: () => [],
       remove: () => {
         sourcePanel.removed = true;
-      }
+      },
+      addEventListener: () => {},
+      hasPointerCapture: () => false,
+      setPointerCapture: () => {}
     };
 
     const tabList = {
@@ -890,7 +902,11 @@ describe('tab drag integration flows', () => {
         minWidth: '',
         maxWidth: '',
         transform: '',
-        willChange: ''
+        willChange: '',
+        zIndex: '',
+        transition: '',
+        visibility: '',
+        pointerEvents: ''
       },
       getBoundingClientRect: () => ({
         left: 100,
@@ -898,7 +914,10 @@ describe('tab drag integration flows', () => {
         width: 120,
         height: 40
       }),
-      remove: () => {}
+      querySelector: () => null,
+      remove: () => {},
+      animate: () => ({ addEventListener: () => {}, cancel: () => {} }),
+      getAnimations: () => []
     };
 
     const draggedTab = {
@@ -937,26 +956,9 @@ describe('tab drag integration flows', () => {
         return null;
       },
       setPointerCapture: () => {},
-      releasePointerCapture: () => {}
-    };
-
-    const createDetachedElement = () => {
-      const el = {
-        className: '',
-        style: {},
-        children: [],
-        parentNode: null,
-        setAttribute: () => {},
-        getAttribute: () => null,
-        querySelector: () => null,
-        querySelectorAll: () => [],
-        append: (...nodes) => { el.children.push(...nodes); },
-        insertBefore: () => {},
-        getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }),
-        remove: () => { el.parentNode = null; },
-        animate: () => ({ addEventListener: () => {}, cancel: () => {} })
-      };
-      return el;
+      releasePointerCapture: () => {},
+      querySelector: () => null,
+      animate: () => ({ addEventListener: () => {}, cancel: () => {} })
     };
 
     const documentStub = {
@@ -968,7 +970,21 @@ describe('tab drag integration flows', () => {
         appendChild: () => {},
         append: () => {}
       },
-      createElement: () => createDetachedElement(),
+      createElement: () => ({
+        className: '',
+        style: {},
+        children: [],
+        parentNode: null,
+        setAttribute: () => {},
+        getAttribute: () => null,
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        append: () => {},
+        insertBefore: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }),
+        remove: () => {},
+        animate: () => ({ addEventListener: () => {}, cancel: () => {} })
+      }),
       querySelectorAll: (selector) => {
         if (selector === '.tab--list') return [tabList];
         if (selector === '.browser') return [sourcePanel];
@@ -1001,8 +1017,22 @@ describe('tab drag integration flows', () => {
         clientY: 340
       });
 
-      expect(windowListeners.has('pointermove')).toBe(false);
+      expect(windowListeners.has('pointermove')).toBe(true);
+
+      windowListeners.get('pointermove')({
+        pointerId: 1,
+        clientX: 140,
+        clientY: 340
+      });
+      flushAnimationFrame();
+
+      expect(sourcePanel.style.left).not.toBe('');
     } finally {
+      windowListeners.get('pointerup')?.({
+        pointerId: 1,
+        clientX: 140,
+        clientY: 340
+      });
       globalThis.window = previousWindow;
       globalThis.document = previousDocument;
       globalThis.Element = previousElement;

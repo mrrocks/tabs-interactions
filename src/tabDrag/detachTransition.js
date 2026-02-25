@@ -18,6 +18,7 @@ export const createDetachTransitionManager = ({ scaleDurationMs, transitionDurat
     active = true;
   };
 
+
   const sample = () => {
     if (!active) {
       return zeroSample;

@@ -5,18 +5,15 @@ import { activeTabClassName } from '../tabs/tabState';
 import { getTabs, setActiveTab, tabListSelector, tabSelector } from '../tabs/tabs';
 import {
   animateDetachedWindowFromTab,
+  createDetachedWindowToggle,
   animatedRemovePanel,
   applyPanelFrame,
   createDetachedWindow,
-  moveTabToList
+  moveTabToList,
+  removePanel
 } from '../window/windowManager';
-import { bringToFront } from '../window/windowFocus';
-import {
-  createDragSession,
-  isSessionAttachedDrag,
-  markSessionAsActivated,
-  transitionSessionToSettling
-} from './dragSessionStateMachine';
+import { bringToFront, getOverlayZIndex } from '../window/windowFocus';
+import { DragPhase, createDragContext, transitionTo, markAsActivated, isActive } from './DragContext';
 import { createLayoutPipeline } from './layoutPipeline';
 import { createDropResolver, isPointInsideRect } from './dropResolver';
 import { createAnimationCoordinator } from './animationCoordinator';
@@ -191,7 +188,7 @@ export const initializeTabDrag = ({
     transitionDurationMs: dragTransitionDurationMs
   });
 
-  let dragState = null;
+  let ctx = null;
   let frameRequestId = 0;
   let longPressTimerId = 0;
   let queuedClientX = 0;
@@ -199,6 +196,7 @@ export const initializeTabDrag = ({
   let hasQueuedPointer = false;
   let sourceWindowRemovedDuringDetach = false;
   let pendingDetachSpawn = false;
+  let detachWindowToggle = null;
   let detachEdgeSnapPreview = null;
 
   const preventSelectStart = (event) => {
@@ -300,18 +298,644 @@ export const initializeTabDrag = ({
     activateDraggedTabInTarget(draggedTab, attachTargetTabList);
   };
 
+  const spawnDetachedWindowDuringDrag = (clientX, clientY) => {
+    if (!ctx || ctx.detachedPanel) {
+      return;
+    }
+
+    const sourceTabList = ctx.currentTabList;
+    const sourcePanel =
+      sourceTabList && typeof sourceTabList.closest === 'function'
+        ? sourceTabList.closest(panelSelector)
+        : null;
+    if (!sourcePanel) {
+      return;
+    }
+
+    const isLastTab = shouldRemoveSourceWindowOnDetach(ctx.sourceTabCount);
+    if (isLastTab) {
+      ctx.sourcePanelRect = toRectSnapshot(sourcePanel.getBoundingClientRect());
+    }
+
+    const tabScreenRect = toRectSnapshot(
+      (ctx.dragProxy ?? ctx.draggedTab).getBoundingClientRect()
+    );
+    const activateInSource = captureSourceActivation(ctx.draggedTab, sourceTabList);
+
+    const detachedWindow = createDetachedWindow({
+      sourcePanel,
+      sourceTabList,
+      tabScreenRect,
+      sourcePanelRect: ctx.sourcePanelRect
+    });
+
+    if (!detachedWindow) {
+      return;
+    }
+
+    initializePanelInteraction(detachedWindow.panel);
+    initializeTabList(detachedWindow.tabList);
+
+    const tab = ctx.draggedTab;
+    const proxy = ctx.dragProxy;
+
+    animateDetachedWindowFromTab({
+      ...detachedWindow,
+      draggedTab: tab,
+      tabScreenRect,
+      onTabInserted: () => {
+        tab.classList.add(noTransitionClassName);
+        placeholderManager.restoreDisplay(tab);
+        tab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
+        tab.style.transform = '';
+        tab.style.transition = '';
+        tab.style.flex = '';
+        tab.style.flexBasis = '';
+        tab.style.minWidth = '';
+        tab.style.maxWidth = '';
+        tab.style.willChange = '';
+        tab.style.zIndex = '';
+        tab.style.visibility = 'hidden';
+        if (proxy) {
+          const wasInactive = proxy.classList.contains(inactiveDragClassName);
+          if (wasInactive) {
+            proxy.classList.remove(dragClassName);
+            proxy.getBoundingClientRect();
+            proxy.classList.remove(inactiveDragClassName);
+            proxy.classList.add(activeDragClassName);
+          }
+          const durationMs = scaleDurationMs(dragTransitionDurationMs);
+          animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
+          animateBackgroundRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
+          animateDragShadowOut(proxy, {
+            durationMs: scaleDurationMs(dragShadowOutDurationMs),
+            isActive: true
+          });
+        }
+        tab.getBoundingClientRect();
+        tab.classList.remove(noTransitionClassName);
+        setActiveTab(detachedWindow.tabList, 0);
+      },
+      onComplete: () => {
+        tab.style.visibility = '';
+        if (!ctx || ctx.dragProxy !== proxy) {
+          dragDomAdapter.removeDragProxy(proxy);
+          return;
+        }
+        if (ctx.proxyParked || hoverPreview.previewTabList != null) {
+          return;
+        }
+        const frame = ctx.detachedPanelFrame;
+        ctx.detachedPointerOffset = {
+          x: ctx.lastClientX - frame.left,
+          y: ctx.lastClientY - frame.top
+        };
+        proxy.style.visibility = 'hidden';
+        proxy.style.pointerEvents = 'none';
+        ctx.proxyParked = true;
+      }
+    });
+
+    ctx.detachedPanel = detachedWindow.panel;
+    ctx.detachedTabList = detachedWindow.tabList;
+    ctx.detachedPanelFrame = { ...detachedWindow.frame };
+    ctx.detachedTabOffsetInPanel = { ...detachedWindow.tabOffsetInPanel };
+
+    activateInSource?.();
+    hoverPreview.clear();
+    visualWidth.cancelAll();
+
+    if (isLastTab) {
+      if (animatedRemovePanel(sourcePanel)) {
+        sourceWindowRemovedDuringDetach = true;
+      }
+    }
+  };
+
+  const promotePanelToDetached = () => {
+    if (!ctx || ctx.detachedPanel) {
+      return;
+    }
+
+    const panel = ctx.currentTabList?.closest?.(panelSelector);
+    if (!panel) {
+      return;
+    }
+
+    const panelRect = panel.getBoundingClientRect();
+    const tabRect = ctx.draggedTab.getBoundingClientRect();
+
+    ctx.detachedPanel = panel;
+    ctx.detachedTabList = ctx.currentTabList;
+    ctx.detachedPanelFrame = {
+      width: panelRect.width,
+      height: panelRect.height,
+      left: panelRect.left,
+      top: panelRect.top
+    };
+    ctx.detachedTabOffsetInPanel = {
+      x: tabRect.left - panelRect.left,
+      y: tabRect.top - panelRect.top
+    };
+    ctx.detachedPointerOffset = {
+      x: ctx.startX - panelRect.left,
+      y: ctx.startY - panelRect.top
+    };
+
+    ctx.draggedTab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
+    ctx.draggedTab.style.transform = '';
+    ctx.draggedTab.style.transition = '';
+    ctx.draggedTab.style.flex = '';
+    ctx.draggedTab.style.flexBasis = '';
+    ctx.draggedTab.style.minWidth = '';
+    ctx.draggedTab.style.maxWidth = '';
+    ctx.draggedTab.style.willChange = '';
+    ctx.draggedTab.style.zIndex = '';
+
+    if (ctx.dragProxy) {
+      ctx.dragProxy.style.visibility = 'hidden';
+      ctx.dragProxy.style.pointerEvents = 'none';
+      ctx.proxyParked = true;
+    }
+
+    hoverPreview.clear();
+    visualWidth.cancelAll();
+  };
+
+  const syncDetachedPanelToProxy = (clientX) => {
+    if (!ctx || !ctx.detachedPanel) {
+      return;
+    }
+
+    const proxyRect = (ctx.dragProxy ?? ctx.draggedTab).getBoundingClientRect();
+    const offset = ctx.detachedTabOffsetInPanel;
+    const frame = ctx.detachedPanelFrame;
+
+    frame.left = proxyRect.left - offset.x;
+    frame.top = proxyRect.top - offset.y;
+    applyPanelFrame(ctx.detachedPanel, frame);
+
+    const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
+    if (snapZone) {
+      if (!detachEdgeSnapPreview) detachEdgeSnapPreview = createEdgeSnapPreview();
+      detachEdgeSnapPreview.show(snapZone);
+    } else if (detachEdgeSnapPreview) {
+      detachEdgeSnapPreview.hide();
+    }
+  };
+
+  const attachToHoveredTabListFromAttachedDrag = (clientX, clientY) => {
+    if (!ctx || ctx.phase !== DragPhase.reordering && ctx.phase !== DragPhase.detachIntent && ctx.phase !== DragPhase.detachedDragging) {
+      return false;
+    }
+
+    const sourceTabList = ctx.currentTabList;
+    const attachTarget = dropResolver.resolveAttachTargetTabList({
+      clientX,
+      clientY,
+      excludedTabList: ctx.detachedTabList ?? (ctx.detachIntentActive ? null : sourceTabList),
+      padding: windowAttachPaddingPx
+    });
+
+    if (attachTarget) {
+      ctx.hoverAttachTabList = attachTarget;
+      ctx.hoverAttachClientX = clientX;
+      ctx.hoverAttachClientY = clientY;
+    }
+
+    if (!attachTarget) {
+      const leavingSourceWhileDetached =
+        ctx.detachIntentActive && !ctx.detachedPanel && hoverPreview.previewTabList === sourceTabList;
+
+      if (leavingSourceWhileDetached && hoverPreview.previewTab) {
+        const previewWidthPx = hoverPreview.previewTab.getBoundingClientRect().width;
+        placeholderManager.ensureAt(hoverPreview.previewTab, ctx, previewWidthPx);
+        hoverPreview.clear();
+        visualWidth.cancelAll();
+      } else {
+        visualWidth.animateOut(hoverPreview.previewTab, (displacements) => {
+          animationCoordinator.animateSiblingDisplacement(displacements);
+        });
+        hoverPreview.detach();
+      }
+
+      if (ctx.detachIntentActive && !isPinned(ctx.draggedTab)) {
+        const panel = sourceTabList?.closest?.(panelSelector);
+        visualWidth.animateToDetachedWidth(ctx, resolveDetachedTabWidth(panel) || ctx.detachedWidthPx);
+      } else if (!ctx.detachIntentActive) {
+        visualWidth.animateToBaseWidth(ctx);
+      }
+      return false;
+    }
+
+    if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
+      const targetPanel = attachTarget.closest?.(panelSelector);
+      if (targetPanel) {
+        bringToFront(targetPanel);
+      }
+      if (ctx.detachedPanel) {
+        bringToFront(ctx.detachedPanel);
+        if (ctx.dragProxy) {
+          ctx.dragProxy.style.zIndex = String(getOverlayZIndex());
+        }
+      }
+      const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
+      const placeholderWidthPx = replacingPlaceholder ? placeholderManager.targetWidthPx() : 0;
+      hoverPreview.createAndAttach(attachTarget);
+      if (isPinned(ctx.draggedTab)) {
+        hoverPreview.previewTab.classList.add(pinnedClassName);
+      }
+      if (replacingPlaceholder) {
+        placeholderManager.replaceWith(hoverPreview.previewTab);
+      }
+      moveTabWithLayoutPipeline({
+        tabList: attachTarget,
+        draggedTab: hoverPreview.previewTab,
+        pointerClientX: clientX
+      });
+      const { displacements } = visualWidth.animateIn(ctx, hoverPreview.previewTab, { fromWidthPx: placeholderWidthPx });
+      if (displacements.length > 0) {
+        animationCoordinator.animateSiblingDisplacement(displacements);
+      }
+    } else if (!visualWidth.animatingIn) {
+      moveTabWithLayoutPipeline({
+        tabList: attachTarget,
+        draggedTab: hoverPreview.previewTab,
+        pointerClientX: clientX
+      });
+      visualWidth.syncWidth(ctx, hoverPreview.previewTab);
+    }
+
+    return true;
+  };
+
+  const phases = {
+    [DragPhase.pressed]: {
+      enter() {
+        longPressTimerId = setTimeout(activateDrag, scaleDurationMs(longPressActivationDelayMs));
+      },
+      frame(clientX, clientY) {
+        const dx = clientX - ctx.startX;
+        const dy = clientY - ctx.startY;
+        if (Math.hypot(dx, dy) >= dragActivationDistancePx) {
+          activateDrag();
+        }
+      },
+      exit() {
+        clearLongPressTimer();
+      }
+    },
+
+    [DragPhase.reordering]: {
+      enter() {},
+      frame(clientX, clientY) {
+        const deltaX = clientX - ctx.startX;
+        const deltaY = clientY - ctx.startY;
+
+        const refRect = getDetachReferenceRect(ctx.currentTabList);
+        const overshootX = refRect
+          ? computeOvershoot({ value: clientX, min: refRect.left, max: refRect.right, inset: resistanceOnsetInsetPx })
+          : 0;
+        const overshootY = refRect
+          ? computeOvershoot({ value: clientY, min: refRect.top, max: refRect.bottom, inset: resistanceOnsetInsetPx })
+          : 0;
+
+        if (ctx.reattachArmed) {
+          ctx.detachIntentActive = resolveDetachIntent({
+            currentIntent: ctx.detachIntentActive,
+            overshootX,
+            overshootY
+          });
+        } else if (
+          Math.abs(overshootX) < detachThresholdPx * 0.5 &&
+          Math.abs(overshootY) < detachThresholdPx * 0.5
+        ) {
+          ctx.reattachArmed = true;
+        }
+
+        if (ctx.detachIntentActive) {
+          const hoverTarget = dropResolver.resolveAttachTargetTabList({
+            clientX,
+            clientY,
+            excludedTabList: ctx.currentTabList,
+            padding: windowAttachPaddingPx
+          });
+          if (hoverTarget) {
+            ctx.detachIntentActive = false;
+          }
+        }
+
+        if (ctx.detachIntentActive) {
+          setPhase(DragPhase.detachIntent);
+          phases[DragPhase.detachIntent].beginDetach(clientX, clientY, overshootX, overshootY);
+          return;
+        }
+
+        const correction = detachTransition.sample();
+        const visualOffsetX = resolveDragVisualOffsetX({
+          deltaX,
+          overshootX,
+          detachIntentActive: false
+        }) + correction.x;
+        const visualOffsetY = resolveDragVisualOffsetY({
+          deltaY,
+          overshootY,
+          detachIntentActive: false
+        }) + correction.y;
+        dragDomAdapter.setDragVisualTransform(ctx, visualOffsetX, visualOffsetY);
+
+        if (!detachTransition.active && attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
+          return;
+        }
+
+        const moveResult = moveTabWithLayoutPipeline({
+          tabList: ctx.currentTabList,
+          draggedTab: ctx.draggedTab,
+          pointerClientX: clientX,
+          dragDirectionSign: Math.sign(deltaX)
+        });
+
+        if (!ctx.dragProxy && moveResult.moved) {
+          ctx.startX += moveResult.draggedBaseShiftX;
+          const updatedDeltaX = clientX - ctx.startX;
+          const updatedVisualOffsetX = resolveDragVisualOffsetX({
+            deltaX: updatedDeltaX,
+            overshootX,
+            detachIntentActive: false
+          }) + correction.x;
+          dragDomAdapter.setDragVisualTransform(ctx, updatedVisualOffsetX, visualOffsetY);
+        }
+      },
+      exit() {}
+    },
+
+    [DragPhase.detachIntent]: {
+      enter() {},
+      beginDetach(clientX, clientY, overshootX, overshootY) {
+        detachTransition.activate({ overshootX, overshootY });
+        if (ctx.dragProxy && !isPinned(ctx.draggedTab)) {
+          const panel = ctx.currentTabList?.closest?.(panelSelector);
+          const detachedWidth = resolveDetachedTabWidth(panel);
+          ctx.detachedWidthPx = detachedWidth;
+          visualWidth.animateToDetachedWidth(ctx, detachedWidth);
+        }
+        pendingDetachSpawn = true;
+      },
+      frame(clientX, clientY) {
+        const deltaX = clientX - ctx.startX;
+        const deltaY = clientY - ctx.startY;
+
+        const refRect = getDetachReferenceRect(ctx.currentTabList);
+        const overshootX = refRect
+          ? computeOvershoot({ value: clientX, min: refRect.left, max: refRect.right, inset: resistanceOnsetInsetPx })
+          : 0;
+        const overshootY = refRect
+          ? computeOvershoot({ value: clientY, min: refRect.top, max: refRect.bottom, inset: resistanceOnsetInsetPx })
+          : 0;
+
+        if (pendingDetachSpawn && !detachTransition.active) {
+          pendingDetachSpawn = false;
+          spawnDetachedWindowDuringDrag(clientX, clientY);
+          if (ctx.detachedPanel) {
+            setPhase(DragPhase.detachedDragging);
+            return;
+          }
+        }
+
+        if (ctx.dragProxy) {
+          const isLastTab = shouldRemoveSourceWindowOnDetach(ctx.sourceTabCount);
+
+          if (isLastTab && !sourceWindowRemovedDuringDetach) {
+            const sourcePanel =
+              ctx.currentTabList && typeof ctx.currentTabList.closest === 'function'
+                ? ctx.currentTabList.closest(panelSelector)
+                : null;
+            if (sourcePanel) {
+              ctx.sourcePanelRect = toRectSnapshot(sourcePanel.getBoundingClientRect());
+              if (animatedRemovePanel(sourcePanel)) {
+                sourceWindowRemovedDuringDetach = true;
+              }
+            }
+          }
+
+          const previewOccupiesSource = hoverPreview.previewTabList === ctx.currentTabList;
+          if (!isLastTab && !previewOccupiesSource) {
+            const insideHeader = isPointerInsideCurrentHeader({
+              tabList: ctx.currentTabList,
+              clientX,
+              clientY
+            });
+            placeholderManager.sync(!insideHeader, ctx);
+          }
+        }
+
+        const correction = detachTransition.sample();
+        const visualOffsetX = resolveDragVisualOffsetX({
+          deltaX,
+          overshootX,
+          detachIntentActive: true
+        }) + correction.x;
+        const visualOffsetY = resolveDragVisualOffsetY({
+          deltaY,
+          overshootY,
+          detachIntentActive: true
+        }) + correction.y;
+        dragDomAdapter.setDragVisualTransform(ctx, visualOffsetX, visualOffsetY);
+
+        if (!detachTransition.active && attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
+          return;
+        }
+      },
+      exit() {}
+    },
+
+    [DragPhase.detachedDragging]: {
+      enter() {},
+      frame(clientX, clientY) {
+        const deltaX = clientX - ctx.startX;
+        const deltaY = clientY - ctx.startY;
+
+        if (ctx.dragProxy && !ctx.proxyParked) {
+          dragDomAdapter.setDragVisualTransform(ctx, deltaX, deltaY);
+          syncDetachedPanelToProxy(clientX);
+        } else if (ctx.detachedPointerOffset) {
+          const frame = ctx.detachedPanelFrame;
+          frame.left = clientX - ctx.detachedPointerOffset.x;
+          frame.top = clientY - ctx.detachedPointerOffset.y;
+          applyPanelFrame(ctx.detachedPanel, frame);
+
+          const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
+          if (snapZone) {
+            if (!detachEdgeSnapPreview) detachEdgeSnapPreview = createEdgeSnapPreview();
+            detachEdgeSnapPreview.show(snapZone);
+          } else if (detachEdgeSnapPreview) {
+            detachEdgeSnapPreview.hide();
+          }
+        }
+
+        if (!detachTransition.active) {
+          const prevPointerEvents = ctx.detachedPanel.style.pointerEvents;
+          ctx.detachedPanel.style.pointerEvents = 'none';
+          const wasAttached = hoverPreview.previewTabList != null;
+          const didAttach = attachToHoveredTabListFromAttachedDrag(clientX, clientY);
+          ctx.detachedPanel.style.pointerEvents = prevPointerEvents;
+
+          if (didAttach && !wasAttached) {
+            enterHoverAttach(clientX, clientY);
+          } else if (!didAttach && wasAttached) {
+            leaveHoverAttach(clientX, clientY);
+          }
+        }
+      },
+      exit() {}
+    },
+
+    [DragPhase.hoverAttaching]: {
+      enter() {},
+      frame(clientX, clientY) {
+        phases[DragPhase.detachedDragging].frame(clientX, clientY);
+      },
+      exit() {}
+    },
+
+    [DragPhase.settling]: {
+      enter() {},
+      frame() {},
+      exit() {}
+    }
+  };
+
+  const enterHoverAttach = (clientX, clientY) => {
+    if (ctx.proxyParked && ctx.dragProxy) {
+      const proxy = ctx.dragProxy;
+      proxy.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+
+      const tabRect = ctx.draggedTab.getBoundingClientRect();
+      proxy.style.transform = 'translate3d(0px, 0px, 0px)';
+      proxy.style.left = `${tabRect.left}px`;
+      proxy.style.top = `${tabRect.top}px`;
+      proxy.style.visibility = '';
+      proxy.style.pointerEvents = '';
+      proxy.style.opacity = '0';
+      ctx.proxyParked = false;
+      dragDomAdapter.rebaseDragVisualAtPointer(ctx, clientX, clientY);
+
+      const durationMs = scaleDurationMs(dragTransitionDurationMs);
+      animateCornerClipOut(proxy, { durationMs });
+      animateBackgroundRadiusToDetached(proxy, { durationMs });
+      animateDragShadowIn(proxy, { durationMs, isActive: true });
+      proxy.animate(
+        [{ opacity: '0' }, { opacity: '1' }],
+        { duration: durationMs, easing: 'ease', fill: 'forwards' }
+      );
+    }
+    ctx.draggedTab.classList.add(dragSourceClassName);
+    if (!detachWindowToggle) {
+      detachWindowToggle = createDetachedWindowToggle({
+        panel: ctx.detachedPanel,
+        tabOffsetInPanel: ctx.detachedTabOffsetInPanel,
+        frame: ctx.detachedPanelFrame
+      });
+    }
+    detachWindowToggle.collapse();
+    if (detachEdgeSnapPreview) {
+      detachEdgeSnapPreview.hide();
+    }
+  };
+
+  const leaveHoverAttach = (clientX, clientY) => {
+    ctx.draggedTab.classList.remove(dragSourceClassName);
+    if (ctx.dragProxy && !ctx.proxyParked) {
+      const proxy = ctx.dragProxy;
+      const currentOpacity = getComputedStyle(proxy).opacity;
+      proxy.getAnimations().forEach((a) => a.cancel());
+      proxy.style.opacity = currentOpacity;
+      const durationMs = scaleDurationMs(dragTransitionDurationMs) * parseFloat(currentOpacity);
+      const fadeOut = proxy.animate(
+        [{ opacity: currentOpacity }, { opacity: '0' }],
+        { duration: Math.max(durationMs, 16), easing: 'ease', fill: 'forwards' }
+      );
+      fadeOut.addEventListener('finish', () => {
+        if (ctx?.proxyParked) {
+          proxy.style.visibility = 'hidden';
+          proxy.style.opacity = '';
+          proxy.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+        }
+      }, { once: true });
+      proxy.style.pointerEvents = 'none';
+      ctx.proxyParked = true;
+      const frame = ctx.detachedPanelFrame;
+      ctx.detachedPointerOffset = {
+        x: clientX - frame.left,
+        y: clientY - frame.top
+      };
+    }
+    if (detachWindowToggle) {
+      detachWindowToggle.expand();
+    }
+  };
+
+  const setPhase = (nextPhase) => {
+    if (!ctx) return;
+    const prev = ctx.phase;
+    if (prev === nextPhase) return;
+    phases[prev]?.exit?.();
+    transitionTo(ctx, nextPhase);
+    phases[nextPhase]?.enter?.();
+  };
+
+  const activateDrag = () => {
+    if (!ctx || ctx.dragStarted) {
+      return;
+    }
+
+    clearLongPressTimer();
+
+    const wasActive = ctx.draggedTab.classList.contains(activeTabClassName);
+    ctx.dragStarted = true;
+    ctx.dragMoved = true;
+
+    dragDomAdapter.applyDragStyles(ctx);
+
+    if (wasActive && ctx.dragProxy) {
+      const durationMs = scaleDurationMs(dragTransitionDurationMs);
+      animateCornerClipOut(ctx.dragProxy, { durationMs });
+      animateBackgroundRadiusToDetached(ctx.dragProxy, { durationMs });
+    }
+
+    if (ctx.dragProxy) {
+      animateDragShadowIn(ctx.dragProxy, {
+        durationMs: scaleDurationMs(dragTransitionDurationMs),
+        isActive: wasActive
+      });
+    }
+
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.style.userSelect = 'none';
+      document.body.classList.add(bodyDraggingClassName);
+    }
+
+    if (ctx.sourceTabCount <= 1) {
+      promotePanelToDetached();
+      setPhase(DragPhase.detachedDragging);
+    } else {
+      setPhase(DragPhase.reordering);
+    }
+  };
+
   const finishDrag = () => {
-    if (!dragState) {
+    if (!ctx) {
       return;
     }
 
     if (pendingDetachSpawn) {
       pendingDetachSpawn = false;
-      spawnDetachedWindowDuringDrag(dragState.lastClientX, dragState.lastClientY);
+      spawnDetachedWindowDuringDrag(ctx.lastClientX, ctx.lastClientY);
     }
 
-    const completedState = transitionSessionToSettling(dragState);
-    dragState = null;
+    const completedState = { ...ctx };
+    setPhase(DragPhase.settling);
+    ctx = null;
     hasQueuedPointer = false;
     sourceWindowRemovedDuringDetach = false;
     visualWidth.cancelAll();
@@ -343,17 +967,59 @@ export const initializeTabDrag = ({
     }
 
     if (completedState.detachedPanel) {
-      completedState.draggedTab.style.visibility = '';
-      dragDomAdapter.removeDragProxy(completedState.dragProxy);
+      if (detachWindowToggle) {
+        detachWindowToggle.destroy();
+        detachWindowToggle = null;
+      }
 
       const attachTarget = hoverPreview.previewTabList;
 
-      if (attachTarget && hoverPreview.previewTab) {
+      if (attachTarget && hoverPreview.previewTab && completedState.dragProxy) {
         const tab = completedState.draggedTab;
+        const proxy = completedState.dragProxy;
+
+        tab.style.visibility = '';
+        dragDomAdapter.restoreDraggedTabStyles(completedState);
         hoverPreview.commitDrop({ draggedTab: tab, attachTargetTabList: attachTarget });
         activateDraggedTabInTarget(tab, attachTarget);
-        animatedRemovePanel(completedState.detachedPanel);
-      } else if (detachEdgeSnapPreview?.activeZone) {
+        tab.style.visibility = 'hidden';
+
+        animateDragShadowOut(proxy, {
+          durationMs: scaleDurationMs(dragShadowOutDurationMs),
+          isActive: proxy.classList.contains(activeDragClassName)
+        });
+
+        const settleAnimation = animationCoordinator.animateProxySettleToTarget({
+          dragProxy: proxy,
+          draggedTab: tab,
+          toRectSnapshot,
+          setDragProxyBaseRect: (rect) => {
+            dragDomAdapter.setDragProxyBaseRect(completedState, rect);
+          },
+          setElementTransform: dragDomAdapter.setElementTransform
+        });
+
+        animationCoordinator.finalizeOnAnimationSettled(settleAnimation, () => {
+          tab.style.visibility = '';
+          dragDomAdapter.removeDragProxy(proxy);
+        });
+
+        removePanel(completedState.detachedPanel);
+      } else if (attachTarget && hoverPreview.previewTab) {
+        const tab = completedState.draggedTab;
+        tab.style.visibility = '';
+        dragDomAdapter.restoreDraggedTabStyles(completedState);
+        dragDomAdapter.removeDragProxy(completedState.dragProxy);
+        hoverPreview.commitDrop({ draggedTab: tab, attachTargetTabList: attachTarget });
+        activateDraggedTabInTarget(tab, attachTarget);
+        removePanel(completedState.detachedPanel);
+      } else {
+        completedState.draggedTab.style.visibility = '';
+        dragDomAdapter.restoreDraggedTabStyles(completedState);
+        dragDomAdapter.removeDragProxy(completedState.dragProxy);
+      }
+
+      if (!attachTarget && detachEdgeSnapPreview?.activeZone) {
         const zone = detachEdgeSnapPreview.activeZone;
         const preSnapFrame = completedState.detachedPanelFrame
           ? { ...completedState.detachedPanelFrame }
@@ -492,419 +1158,8 @@ export const initializeTabDrag = ({
     }
   };
 
-  const spawnDetachedWindowDuringDrag = (clientX, clientY) => {
-    if (!dragState || dragState.detachedPanel) {
-      return;
-    }
-
-    const sourceTabList = dragState.currentTabList;
-    const sourcePanel =
-      sourceTabList && typeof sourceTabList.closest === 'function'
-        ? sourceTabList.closest(panelSelector)
-        : null;
-    if (!sourcePanel) {
-      return;
-    }
-
-    const isLastTab = shouldRemoveSourceWindowOnDetach(dragState.sourceTabCount);
-    if (isLastTab) {
-      dragState.sourcePanelRect = toRectSnapshot(sourcePanel.getBoundingClientRect());
-    }
-
-    const tabScreenRect = toRectSnapshot(
-      (dragState.dragProxy ?? dragState.draggedTab).getBoundingClientRect()
-    );
-    const activateInSource = captureSourceActivation(dragState.draggedTab, sourceTabList);
-
-    const detachedWindow = createDetachedWindow({
-      sourcePanel,
-      sourceTabList,
-      tabScreenRect,
-      sourcePanelRect: dragState.sourcePanelRect
-    });
-
-    if (!detachedWindow) {
-      return;
-    }
-
-    initializePanelInteraction(detachedWindow.panel);
-    initializeTabList(detachedWindow.tabList);
-
-    const tab = dragState.draggedTab;
-    const proxy = dragState.dragProxy;
-
-    animateDetachedWindowFromTab({
-      ...detachedWindow,
-      draggedTab: tab,
-      tabScreenRect,
-      onTabInserted: () => {
-        tab.classList.add(noTransitionClassName);
-        placeholderManager.restoreDisplay(tab);
-        tab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
-        tab.style.transform = '';
-        tab.style.transition = '';
-        tab.style.flex = '';
-        tab.style.flexBasis = '';
-        tab.style.minWidth = '';
-        tab.style.maxWidth = '';
-        tab.style.willChange = '';
-        tab.style.zIndex = '';
-        tab.style.visibility = 'hidden';
-        if (proxy) {
-          const wasInactive = proxy.classList.contains(inactiveDragClassName);
-          if (wasInactive) {
-            proxy.classList.remove(dragClassName);
-            proxy.getBoundingClientRect();
-            proxy.classList.remove(inactiveDragClassName);
-            proxy.classList.add(activeDragClassName);
-          }
-          const durationMs = scaleDurationMs(dragTransitionDurationMs);
-          animateCornerClipIn(proxy, { durationMs, fill: 'forwards' });
-          animateBackgroundRadiusToAttached(proxy, { durationMs, fill: 'forwards' });
-          animateDragShadowOut(proxy, {
-            durationMs: scaleDurationMs(dragShadowOutDurationMs),
-            isActive: true
-          });
-        }
-        tab.getBoundingClientRect();
-        tab.classList.remove(noTransitionClassName);
-        setActiveTab(detachedWindow.tabList, 0);
-      },
-      onComplete: () => {
-        tab.style.visibility = '';
-        if (dragState && dragState.dragProxy === proxy) {
-          const frame = dragState.detachedPanelFrame;
-          dragState.detachedPointerOffset = {
-            x: dragState.lastClientX - frame.left,
-            y: dragState.lastClientY - frame.top
-          };
-          dragState.dragProxy = null;
-        }
-        dragDomAdapter.removeDragProxy(proxy);
-      }
-    });
-
-    dragState.detachedPanel = detachedWindow.panel;
-    dragState.detachedTabList = detachedWindow.tabList;
-    dragState.detachedPanelFrame = { ...detachedWindow.frame };
-    dragState.detachedTabOffsetInPanel = { ...detachedWindow.tabOffsetInPanel };
-
-    activateInSource?.();
-    hoverPreview.clear();
-    visualWidth.cancelAll();
-
-    if (isLastTab) {
-      if (animatedRemovePanel(sourcePanel)) {
-        sourceWindowRemovedDuringDetach = true;
-      }
-    }
-  };
-
-  const syncDetachedPanelToProxy = (clientX) => {
-    if (!dragState || !dragState.detachedPanel) {
-      return;
-    }
-
-    const proxyRect = (dragState.dragProxy ?? dragState.draggedTab).getBoundingClientRect();
-    const offset = dragState.detachedTabOffsetInPanel;
-    const frame = dragState.detachedPanelFrame;
-
-    frame.left = proxyRect.left - offset.x;
-    frame.top = proxyRect.top - offset.y;
-    applyPanelFrame(dragState.detachedPanel, frame);
-
-    const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
-    if (snapZone) {
-      if (!detachEdgeSnapPreview) detachEdgeSnapPreview = createEdgeSnapPreview();
-      detachEdgeSnapPreview.show(snapZone);
-    } else if (detachEdgeSnapPreview) {
-      detachEdgeSnapPreview.hide();
-    }
-  };
-
-  const applyAttachedDragSample = (clientX, clientY) => {
-    if (!dragState) {
-      return;
-    }
-
-    const deltaX = clientX - dragState.startX;
-    const deltaY = clientY - dragState.startY;
-    const wasDetached = dragState.detachIntentActive;
-
-    const refRect = getDetachReferenceRect(dragState.currentTabList);
-    const overshootX = refRect
-      ? computeOvershoot({ value: clientX, min: refRect.left, max: refRect.right, inset: resistanceOnsetInsetPx })
-      : 0;
-    const overshootY = refRect
-      ? computeOvershoot({ value: clientY, min: refRect.top, max: refRect.bottom, inset: resistanceOnsetInsetPx })
-      : 0;
-
-    if (dragState.reattachArmed) {
-      dragState.detachIntentActive = resolveDetachIntent({
-        currentIntent: dragState.detachIntentActive,
-        overshootX,
-        overshootY
-      });
-    } else if (
-      Math.abs(overshootX) < detachThresholdPx * 0.5 &&
-      Math.abs(overshootY) < detachThresholdPx * 0.5
-    ) {
-      dragState.reattachArmed = true;
-    }
-
-    if (!wasDetached && dragState.detachIntentActive) {
-      const hoverTarget = dropResolver.resolveAttachTargetTabList({
-        clientX,
-        clientY,
-        excludedTabList: dragState.currentTabList,
-        padding: windowAttachPaddingPx
-      });
-      if (hoverTarget) {
-        dragState.detachIntentActive = false;
-      }
-    }
-
-    if (!wasDetached && dragState.detachIntentActive) {
-      detachTransition.activate({ overshootX, overshootY });
-      if (dragState.dragProxy && !isPinned(dragState.draggedTab)) {
-        const panel = dragState.currentTabList?.closest?.(panelSelector);
-        const detachedWidth = resolveDetachedTabWidth(panel);
-        dragState.detachedWidthPx = detachedWidth;
-        visualWidth.animateToDetachedWidth(dragState, detachedWidth);
-      }
-      pendingDetachSpawn = true;
-    }
-
-    if (dragState.detachedPanel) {
-      if (dragState.dragProxy) {
-        const correction = detachTransition.sample();
-        const visualOffsetX = resolveDragVisualOffsetX({ deltaX, overshootX, detachIntentActive: true }) + correction.x;
-        const visualOffsetY = resolveDragVisualOffsetY({ deltaY, overshootY, detachIntentActive: true }) + correction.y;
-        dragDomAdapter.setDragVisualTransform(dragState, visualOffsetX, visualOffsetY);
-        syncDetachedPanelToProxy(clientX);
-      } else if (dragState.detachedPointerOffset) {
-        const frame = dragState.detachedPanelFrame;
-        frame.left = clientX - dragState.detachedPointerOffset.x;
-        frame.top = clientY - dragState.detachedPointerOffset.y;
-        applyPanelFrame(dragState.detachedPanel, frame);
-
-        const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
-        if (snapZone) {
-          if (!detachEdgeSnapPreview) detachEdgeSnapPreview = createEdgeSnapPreview();
-          detachEdgeSnapPreview.show(snapZone);
-        } else if (detachEdgeSnapPreview) {
-          detachEdgeSnapPreview.hide();
-        }
-      }
-
-      if (!detachTransition.active && attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
-        return;
-      }
-      return;
-    }
-
-    if (pendingDetachSpawn && !detachTransition.active) {
-      pendingDetachSpawn = false;
-      spawnDetachedWindowDuringDrag(clientX, clientY);
-      if (dragState.detachedPanel) {
-        return;
-      }
-    }
-
-    if (dragState.dragProxy) {
-      const isLastTab = shouldRemoveSourceWindowOnDetach(dragState.sourceTabCount);
-
-      if (dragState.detachIntentActive && isLastTab && !sourceWindowRemovedDuringDetach) {
-        const sourcePanel =
-          dragState.currentTabList && typeof dragState.currentTabList.closest === 'function'
-            ? dragState.currentTabList.closest(panelSelector)
-            : null;
-
-        if (sourcePanel) {
-          dragState.sourcePanelRect = toRectSnapshot(sourcePanel.getBoundingClientRect());
-          if (animatedRemovePanel(sourcePanel)) {
-            sourceWindowRemovedDuringDetach = true;
-          }
-        }
-      }
-
-      const previewOccupiesSource = hoverPreview.previewTabList === dragState.currentTabList;
-      if (!isLastTab && dragState.detachIntentActive && !previewOccupiesSource) {
-        const insideHeader = isPointerInsideCurrentHeader({
-          tabList: dragState.currentTabList,
-          clientX,
-          clientY
-        });
-        placeholderManager.sync(!insideHeader, dragState);
-      }
-    }
-
-    const correction = detachTransition.sample();
-    const visualOffsetX = resolveDragVisualOffsetX({
-      deltaX,
-      overshootX,
-      detachIntentActive: dragState.detachIntentActive
-    }) + correction.x;
-    const visualOffsetY = resolveDragVisualOffsetY({
-      deltaY,
-      overshootY,
-      detachIntentActive: dragState.detachIntentActive
-    }) + correction.y;
-    dragDomAdapter.setDragVisualTransform(dragState, visualOffsetX, visualOffsetY);
-
-    if (!detachTransition.active && attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
-      return;
-    }
-
-    if (dragState.detachIntentActive) {
-      return;
-    }
-
-    const moveResult = moveTabWithLayoutPipeline({
-      tabList: dragState.currentTabList,
-      draggedTab: dragState.draggedTab,
-      pointerClientX: clientX,
-      dragDirectionSign: Math.sign(deltaX)
-    });
-
-    if (!dragState.dragProxy && moveResult.moved) {
-      dragState.startX += moveResult.draggedBaseShiftX;
-      const updatedDeltaX = clientX - dragState.startX;
-      const updatedVisualOffsetX = resolveDragVisualOffsetX({
-        deltaX: updatedDeltaX,
-        overshootX,
-        detachIntentActive: dragState.detachIntentActive
-      }) + correction.x;
-      dragDomAdapter.setDragVisualTransform(dragState, updatedVisualOffsetX, visualOffsetY);
-    }
-  };
-
-  const attachToHoveredTabListFromAttachedDrag = (clientX, clientY) => {
-    if (!dragState || !isSessionAttachedDrag(dragState)) {
-      return false;
-    }
-
-    const sourceTabList = dragState.currentTabList;
-    const attachTarget = dropResolver.resolveAttachTargetTabList({
-      clientX,
-      clientY,
-      excludedTabList: dragState.detachedTabList ?? (dragState.detachIntentActive ? null : sourceTabList),
-      padding: windowAttachPaddingPx
-    });
-
-    if (attachTarget) {
-      dragState.hoverAttachTabList = attachTarget;
-      dragState.hoverAttachClientX = clientX;
-      dragState.hoverAttachClientY = clientY;
-    }
-
-    if (!attachTarget) {
-      const leavingSourceWhileDetached =
-        dragState.detachIntentActive && hoverPreview.previewTabList === sourceTabList;
-
-      if (leavingSourceWhileDetached && hoverPreview.previewTab) {
-        const previewWidthPx = hoverPreview.previewTab.getBoundingClientRect().width;
-        placeholderManager.ensureAt(hoverPreview.previewTab, dragState, previewWidthPx);
-        hoverPreview.clear();
-        visualWidth.cancelAll();
-      } else {
-        visualWidth.animateOut(hoverPreview.previewTab, (displacements) => {
-          animationCoordinator.animateSiblingDisplacement(displacements);
-        });
-        hoverPreview.detach();
-      }
-
-      if (dragState.detachIntentActive && !isPinned(dragState.draggedTab)) {
-        const panel = sourceTabList?.closest?.(panelSelector);
-        visualWidth.animateToDetachedWidth(dragState, resolveDetachedTabWidth(panel) || dragState.detachedWidthPx);
-      } else if (!dragState.detachIntentActive) {
-        visualWidth.animateToBaseWidth(dragState);
-      }
-      return false;
-    }
-
-    if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
-      const targetPanel = attachTarget.closest?.(panelSelector);
-      if (targetPanel) {
-        bringToFront(targetPanel);
-      }
-      const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
-      const placeholderWidthPx = replacingPlaceholder ? placeholderManager.targetWidthPx() : 0;
-      hoverPreview.createAndAttach(attachTarget);
-      if (isPinned(dragState.draggedTab)) {
-        hoverPreview.previewTab.classList.add(pinnedClassName);
-      }
-      if (replacingPlaceholder) {
-        placeholderManager.replaceWith(hoverPreview.previewTab);
-      }
-      moveTabWithLayoutPipeline({
-        tabList: attachTarget,
-        draggedTab: hoverPreview.previewTab,
-        pointerClientX: clientX
-      });
-      const { displacements } = visualWidth.animateIn(dragState, hoverPreview.previewTab, { fromWidthPx: placeholderWidthPx });
-      if (displacements.length > 0) {
-        animationCoordinator.animateSiblingDisplacement(displacements);
-      }
-    } else if (!visualWidth.animatingIn) {
-      moveTabWithLayoutPipeline({
-        tabList: attachTarget,
-        draggedTab: hoverPreview.previewTab,
-        pointerClientX: clientX
-      });
-      visualWidth.syncWidth(dragState, hoverPreview.previewTab);
-    }
-
-    return true;
-  };
-
-  const activateDrag = () => {
-    if (!dragState || dragState.dragStarted) {
-      return;
-    }
-
-    clearLongPressTimer();
-
-    const wasActive = dragState.draggedTab.classList.contains(activeTabClassName);
-    dragState = markSessionAsActivated(dragState);
-    dragDomAdapter.applyDragStyles(dragState);
-
-    if (wasActive && dragState.dragProxy) {
-      const durationMs = scaleDurationMs(dragTransitionDurationMs);
-      animateCornerClipOut(dragState.dragProxy, { durationMs });
-      animateBackgroundRadiusToDetached(dragState.dragProxy, { durationMs });
-    }
-
-    if (dragState.dragProxy) {
-      animateDragShadowIn(dragState.dragProxy, {
-        durationMs: scaleDurationMs(dragTransitionDurationMs),
-        isActive: wasActive
-      });
-    }
-
-    if (typeof document !== 'undefined' && document.body) {
-      document.body.style.userSelect = 'none';
-      document.body.classList.add(bodyDraggingClassName);
-    }
-  };
-
-  const startDragIfNeeded = (clientX, clientY) => {
-    if (!dragState || dragState.dragStarted) {
-      return;
-    }
-
-    const deltaX = clientX - dragState.startX;
-    const deltaY = clientY - dragState.startY;
-
-    if (Math.hypot(deltaX, deltaY) < dragActivationDistancePx) {
-      return;
-    }
-
-    activateDrag();
-  };
-
   const applyDragSample = () => {
-    if (!dragState) {
+    if (!ctx) {
       return;
     }
 
@@ -912,19 +1167,16 @@ export const initializeTabDrag = ({
       return;
     }
 
-    const clientX = hasQueuedPointer ? queuedClientX : dragState.lastClientX;
-    const clientY = hasQueuedPointer ? queuedClientY : dragState.lastClientY;
-    dragState.lastClientX = clientX;
-    dragState.lastClientY = clientY;
+    const clientX = hasQueuedPointer ? queuedClientX : ctx.lastClientX;
+    const clientY = hasQueuedPointer ? queuedClientY : ctx.lastClientY;
+    ctx.lastClientX = clientX;
+    ctx.lastClientY = clientY;
 
-    startDragIfNeeded(clientX, clientY);
+    const prevPhase = ctx.phase;
+    phases[ctx.phase]?.frame?.(clientX, clientY);
 
-    if (!dragState.dragStarted) {
-      return;
-    }
-
-    if (isSessionAttachedDrag(dragState)) {
-      applyAttachedDragSample(clientX, clientY);
+    if (ctx && ctx.phase !== prevPhase && ctx.phase !== DragPhase.pressed && ctx.phase !== DragPhase.settling) {
+      phases[ctx.phase]?.frame?.(clientX, clientY);
     }
   };
 
@@ -954,7 +1206,7 @@ export const initializeTabDrag = ({
   };
 
   const onPointerMove = (event) => {
-    if (!dragState || event.pointerId !== dragState.pointerId) {
+    if (!ctx || event.pointerId !== ctx.pointerId) {
       return;
     }
 
@@ -965,7 +1217,7 @@ export const initializeTabDrag = ({
   };
 
   const onPointerUp = (event) => {
-    if (!dragState || event.pointerId !== dragState.pointerId) {
+    if (!ctx || event.pointerId !== ctx.pointerId) {
       return;
     }
 
@@ -977,7 +1229,7 @@ export const initializeTabDrag = ({
   };
 
   root.addEventListener('pointerdown', (event) => {
-    if (dragState) {
+    if (ctx) {
       return;
     }
 
@@ -999,10 +1251,6 @@ export const initializeTabDrag = ({
       return;
     }
 
-    if (getTabs(tabList).length <= 1) {
-      return;
-    }
-
     const sourcePanel = draggedTab.closest(panelSelector);
     if (!sourcePanel) {
       return;
@@ -1018,7 +1266,7 @@ export const initializeTabDrag = ({
       }
     }
 
-    dragState = createDragSession({
+    ctx = createDragContext({
       pointerId: event.pointerId,
       draggedTab,
       currentTabList: tabList,
@@ -1043,7 +1291,9 @@ export const initializeTabDrag = ({
     hasQueuedPointer = true;
     sourceWindowRemovedDuringDetach = false;
     visualWidth.cancelAll();
-    longPressTimerId = setTimeout(activateDrag, scaleDurationMs(longPressActivationDelayMs));
+
+    phases[DragPhase.pressed].enter();
+
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);

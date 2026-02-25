@@ -12,7 +12,7 @@ import {
   animatePanelToSnappedFrame,
   snappedPanelFrames
 } from './panelEdgeSnap';
-import { tabItemSelector, tabAddSelector, tabCloseSelector, windowControlsSelector, tabListSelector } from '../shared/selectors';
+import { tabItemSelector, tabAddSelector, tabCloseSelector, windowControlsSelector } from '../shared/selectors';
 
 const resizeHitArea = 10;
 const grabCursor = 'grab';
@@ -270,15 +270,8 @@ export const initializePanelInteraction = (panel) => {
     }
 
     if (event.target instanceof Element) {
-      if (event.target.closest(windowControlsSelector) || event.target.closest(tabAddSelector) || event.target.closest(tabCloseSelector)) {
+      if (event.target.closest(windowControlsSelector) || event.target.closest(tabAddSelector) || event.target.closest(tabCloseSelector) || event.target.closest(tabItemSelector)) {
         return;
-      }
-      if (event.target.closest(tabItemSelector)) {
-        const tabList = panel.querySelector(tabListSelector);
-        const tabCount = tabList ? tabList.querySelectorAll(tabItemSelector).length : 0;
-        if (tabCount > 1) {
-          return;
-        }
       }
     }
 

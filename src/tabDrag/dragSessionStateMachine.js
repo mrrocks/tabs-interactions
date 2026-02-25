@@ -37,6 +37,7 @@ export const createDragSession = ({
   detachedPanelFrame: null,
   detachedTabOffsetInPanel: null,
   detachedPointerOffset: null,
+  proxyParked: false,
   sourcePanelRect: null,
   startX: toFiniteNumber(startX, 0),
   startY: toFiniteNumber(startY, 0),
