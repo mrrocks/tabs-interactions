@@ -564,6 +564,7 @@ export const initializeTabDrag = ({
         const deltaY = clientY - ctx.startY;
 
         const { overshootX, overshootY } = computeDetachState(clientX, clientY);
+        const correction = detachTransition.sample();
 
         if (ctx.pendingDetachSpawn && !detachTransition.active) {
           ctx.pendingDetachSpawn = false;
@@ -601,7 +602,6 @@ export const initializeTabDrag = ({
           }
         }
 
-        const correction = detachTransition.sample();
         const visualOffsetX = resolveDragVisualOffsetX({
           deltaX,
           overshootX,
