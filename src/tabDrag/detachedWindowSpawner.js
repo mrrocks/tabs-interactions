@@ -43,7 +43,7 @@ export const spawnDetachedWindow = (ctx, deps) => {
 
   const { scaleDurationMs, initializePanelInteraction, initializeTabList,
     dragDomAdapter, hoverPreview, placeholderManager, visualWidth,
-    parkProxyWithOffset, getCtx } = deps;
+    fadeOutProxy, parkProxyWithOffset, getCtx } = deps;
 
   const sourceTabList = ctx.currentTabList;
   const sourcePanel =
@@ -90,7 +90,7 @@ export const spawnDetachedWindow = (ctx, deps) => {
     if (liveCtx.proxyParked || hoverPreview.previewTabList != null) {
       return;
     }
-    parkProxyWithOffset(liveCtx, liveCtx.lastClientX, liveCtx.lastClientY);
+    fadeOutProxy(liveCtx, liveCtx.lastClientX, liveCtx.lastClientY);
   };
 
   const scaleInFallbackId = setTimeout(() => {

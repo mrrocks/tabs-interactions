@@ -57,6 +57,7 @@ export const createDragContext = ({
   detachedTabOffsetInPanel: null,
   detachedPointerOffset: null,
   proxyParked: false,
+  proxyFadingOut: false,
 
   sourceWindowRemovedDuringDetach: false,
   pendingDetachSpawn: false,

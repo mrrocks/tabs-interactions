@@ -230,6 +230,7 @@ export const initializeTabDrag = ({
     proxy.style.pointerEvents = 'none';
     proxy.style.opacity = '';
     state.proxyParked = true;
+    state.proxyFadingOut = false;
   };
 
   const parkProxyWithOffset = (state, clientX, clientY) => {
@@ -242,7 +243,7 @@ export const initializeTabDrag = ({
     }
   };
 
-  const unparkProxy = (state, clientX, clientY) => {
+  const restoreParkedProxy = (state, clientX, clientY) => {
     const proxy = state.dragProxy;
     if (!proxy) return;
     proxy.getAnimations?.({ subtree: true })?.forEach((a) => a.cancel());
@@ -253,13 +254,18 @@ export const initializeTabDrag = ({
     proxy.style.top = `${tabRect.top}px`;
     proxy.style.visibility = '';
     proxy.style.pointerEvents = '';
-    proxy.style.opacity = '0';
+    proxy.style.opacity = '';
     state.proxyParked = false;
+    state.proxyFadingOut = false;
     dragDomAdapter.rebaseDragVisualAtPointer(state, clientX, clientY);
+  };
+
+  const unparkProxy = (state, clientX, clientY) => {
+    restoreParkedProxy(state, clientX, clientY);
 
     const durationMs = scaleDurationMs(dragTransitionDurationMs);
-    applyProxyDetachedStyle(proxy, { isActive: true, durationMs });
-    proxy.animate(
+    applyProxyDetachedStyle(state.dragProxy, { isActive: true, durationMs });
+    state.dragProxy.animate(
       [{ opacity: '0' }, { opacity: '1' }],
       { duration: durationMs, easing: 'ease', fill: 'forwards' }
     );
@@ -281,10 +287,12 @@ export const initializeTabDrag = ({
         proxy.style.visibility = 'hidden';
         proxy.style.opacity = '';
         proxy.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+        state.proxyFadingOut = false;
       }
     }, { once: true });
     proxy.style.pointerEvents = 'none';
     state.proxyParked = true;
+    state.proxyFadingOut = true;
     if (state.detachedPanelFrame) {
       state.detachedPointerOffset = {
         x: clientX - state.detachedPanelFrame.left,
@@ -301,6 +309,7 @@ export const initializeTabDrag = ({
     hoverPreview,
     placeholderManager,
     visualWidth,
+    fadeOutProxy,
     parkProxyWithOffset,
     parkProxy,
     getCtx: () => ctx
@@ -637,9 +646,9 @@ export const initializeTabDrag = ({
           const hasReclaimablePreview = visualWidth.outgoingPreviewTab != null;
           const hadHoverPresence = hasActivePreview || hasReclaimablePreview;
 
-          const shouldUnpark = !hadHoverPresence && ctx.proxyParked && ctx.dragProxy;
-          if (shouldUnpark) {
-            unparkProxy(ctx, clientX, clientY);
+          const wasParked = !hadHoverPresence && ctx.proxyParked && ctx.dragProxy;
+          if (wasParked && !ctx.proxyFadingOut) {
+            restoreParkedProxy(ctx, clientX, clientY);
           }
 
           const didAttach = attachToHoveredTabListFromAttachedDrag(clientX, clientY);
@@ -649,6 +658,10 @@ export const initializeTabDrag = ({
           const hoverPresenceLost = hadHoverPresence && !didAttach && !stillReclaimable && hoverPreview.previewTabList == null;
 
           if (didAttach && !hadHoverPresence) {
+            if (wasParked) {
+              restoreParkedProxy(ctx, clientX, clientY);
+              applyProxyDetachedStyle(ctx.dragProxy, { isActive: true });
+            }
             enterHoverAttach(clientX, clientY);
           } else if (didAttach && hasReclaimablePreview && !hasActivePreview) {
             if (ctx.detachWindowToggle) {
@@ -669,7 +682,7 @@ export const initializeTabDrag = ({
             ctx.draggedTab.classList.remove(dragSourceClassName);
           } else if (hoverPresenceLost) {
             leaveHoverAttach(clientX, clientY);
-          } else if (shouldUnpark && !didAttach) {
+          } else if (wasParked && !ctx.proxyFadingOut && !didAttach) {
             parkProxy(ctx);
           }
         }
