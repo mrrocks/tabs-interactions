@@ -712,7 +712,7 @@ export const initializeTabDrag = ({
     }
   };
 
-  const finishDrag = () => {
+  const completeDrag = () => {
     if (!ctx) {
       return;
     }
@@ -772,6 +772,23 @@ export const initializeTabDrag = ({
     }
   };
 
+  let deferredCompletion = false;
+
+  const finishDrag = () => {
+    if (!ctx) {
+      return;
+    }
+
+    if (ctx.pendingDetachSpawn && detachTransition.active) {
+      deferredCompletion = true;
+      clearGlobalListeners();
+      pointerLoop.schedule();
+      return;
+    }
+
+    completeDrag();
+  };
+
   const pointerLoop = createPointerFrameLoop({
     onSample(clientX, clientY) {
       if (!ctx) return;
@@ -787,6 +804,12 @@ export const initializeTabDrag = ({
 
       if (ctx && ctx.phase !== prevPhase && ctx.phase !== DragPhase.pressed && ctx.phase !== DragPhase.settling) {
         phases[ctx.phase]?.frame?.(cx, cy);
+      }
+
+      if (deferredCompletion && !detachTransition.active) {
+        deferredCompletion = false;
+        completeDrag();
+        return;
       }
 
       if (detachTransition.active) {
