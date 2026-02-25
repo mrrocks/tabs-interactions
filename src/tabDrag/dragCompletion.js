@@ -15,7 +15,7 @@ import {
   computeDisplacements
 } from './dragCalculations';
 import { animateDragShadowOut } from './dragShadowAnimation';
-import { dragTransitionDurationMs, dragShadowOutDurationMs } from './dragAnimationConfig';
+import { dragTransitionDurationMs, dragShadowOutDurationMs, dragTransitionEasing } from './dragAnimationConfig';
 import { applyTabAttachedStyle, applyProxyAttachedStyle } from './styleHelpers';
 import { captureSourceActivation } from './detachedWindowSpawner';
 import {
@@ -24,6 +24,20 @@ import {
   snappedPanelFrames
 } from '../panel/panelEdgeSnap';
 import { activeDragClassName } from './dragClassNames';
+
+const syncProxyWidthToTarget = (proxy, targetWidth) => {
+  if (!(targetWidth > 0) || typeof proxy.animate !== 'function') return;
+  const currentWidth = proxy.getBoundingClientRect().width;
+  if (Math.abs(currentWidth - targetWidth) < 0.5) return;
+  proxy.style.transition = 'none';
+  proxy.animate(
+    [
+      { width: `${currentWidth}px`, minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
+      { width: `${targetWidth}px`, minWidth: `${targetWidth}px`, maxWidth: `${targetWidth}px` }
+    ],
+    { duration: scaleDurationMs(dragTransitionDurationMs), easing: dragTransitionEasing, fill: 'forwards' }
+  );
+};
 
 export const settleDetachedDrag = (completedState, deps) => {
   const { dragDomAdapter, hoverPreview, animationCoordinator, visualWidth, commitDropAttach } = deps;
@@ -41,7 +55,7 @@ export const settleDetachedDrag = (completedState, deps) => {
     tab.style.visibility = '';
     visualWidth.cancelAll();
 
-    commitDropAttach({
+    const { toWidth, settledRect } = commitDropAttach({
       draggedTab: tab,
       attachTargetTabList: attachTarget,
       pointerClientX: completedState.lastClientX
@@ -56,10 +70,13 @@ export const settleDetachedDrag = (completedState, deps) => {
         isActive: proxy.classList.contains(activeDragClassName)
       });
 
+      syncProxyWidthToTarget(proxy, toWidth);
+
       const settleAnimation = animationCoordinator.animateProxySettleToTarget({
         dragProxy: proxy,
         draggedTab: tab,
         toRectSnapshot,
+        settleTargetRect: settledRect,
         setDragProxyBaseRect: (rect) => {
           dragDomAdapter.setDragProxyBaseRect(completedState, rect);
         },

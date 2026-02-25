@@ -106,6 +106,16 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     );
   };
 
+  const measureNaturalWidthInList = (previewTab) => {
+    const saved = { minWidth: previewTab.style.minWidth, maxWidth: previewTab.style.maxWidth };
+    previewTab.style.minWidth = '';
+    previewTab.style.maxWidth = '';
+    const width = toFiniteNumber(previewTab.getBoundingClientRect().width, 0);
+    previewTab.style.minWidth = saved.minWidth;
+    previewTab.style.maxWidth = saved.maxWidth;
+    return width;
+  };
+
   const animateIn = (session, previewTab, { fromWidthPx = 0 } = {}) => {
     if (!previewTab || !session) {
       return { displacements: [] };
@@ -113,10 +123,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
     cancelAll();
 
-    const settledWidthPx = resolveHoverPreviewWidthPx({
+    const naturalWidthPx = previewTab.parentNode ? measureNaturalWidthInList(previewTab) : 0;
+    const fallbackWidthPx = resolveHoverPreviewWidthPx({
       dragProxyBaseRect: session.dragProxyBaseRect,
       draggedTab: session.draggedTab
     });
+    const settledWidthPx = naturalWidthPx > 0 ? naturalWidthPx : fallbackWidthPx;
     if (settledWidthPx <= 0) {
       return { displacements: [] };
     }

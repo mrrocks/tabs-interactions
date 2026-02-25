@@ -1,5 +1,5 @@
 import { scaleDurationMs } from '../motion/motionSpeed';
-import { onAnimationSettled } from '../shared/dom';
+import { onAnimationSettled, toRectSnapshot } from '../shared/dom';
 import {
   animateCornerClipIn,
   animateCornerClipOut,
@@ -24,27 +24,27 @@ export const clearFlexLock = (el) => {
 export const animateFlexWidthTransition = (el, { durationMs, easing }) => {
   const currentWidth = el.getBoundingClientRect().width;
   clearFlexLock(el);
-  const naturalWidth = el.getBoundingClientRect().width;
+  const settledRect = toRectSnapshot(el.getBoundingClientRect());
 
-  if (naturalWidth <= 0 || Math.abs(currentWidth - naturalWidth) < 1) {
-    return null;
+  if (settledRect.width <= 0 || Math.abs(currentWidth - settledRect.width) < 1) {
+    return { animation: null, toWidth: settledRect.width, settledRect };
   }
 
   setFlexLock(el, currentWidth);
 
-  const anim = el.animate(
+  const animation = el.animate(
     [
       { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
-      { minWidth: `${naturalWidth}px`, maxWidth: `${naturalWidth}px` }
+      { minWidth: `${settledRect.width}px`, maxWidth: `${settledRect.width}px` }
     ],
     { duration: durationMs, easing, fill: 'forwards' }
   );
 
-  onAnimationSettled(anim, () => {
-    anim.cancel();
+  onAnimationSettled(animation, () => {
+    animation.cancel();
     clearFlexLock(el);
   });
-  return anim;
+  return { animation, toWidth: settledRect.width, settledRect };
 };
 
 const DRAG_STYLE_KEYS = ['transform', 'transition', 'flex', 'flexBasis', 'minWidth', 'maxWidth', 'willChange', 'zIndex'];

@@ -76,6 +76,7 @@ export const createAnimationCoordinator = ({
     dragProxy,
     draggedTab,
     toRectSnapshot,
+    settleTargetRect,
     setDragProxyBaseRect,
     setElementTransform
   }) => {
@@ -84,7 +85,7 @@ export const createAnimationCoordinator = ({
     }
 
     const proxyRect = toRectSnapshot(dragProxy.getBoundingClientRect());
-    const targetRect = toRectSnapshot(draggedTab.getBoundingClientRect());
+    const targetRect = settleTargetRect ?? toRectSnapshot(draggedTab.getBoundingClientRect());
     const settleDelta = getProxySettleDelta({
       proxyRect,
       targetRect

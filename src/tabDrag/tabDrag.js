@@ -201,12 +201,14 @@ export const initializeTabDrag = ({
       attachTargetTabList
     });
 
-    if (didCommitPreviewDrop) {
-      animateFlexWidthTransition(draggedTab, {
+    const flexResult = didCommitPreviewDrop
+      ? animateFlexWidthTransition(draggedTab, {
         durationMs: scaleDurationMs(dragTransitionDurationMs),
         easing: dragTransitionEasing
-      });
-    } else {
+      })
+      : null;
+
+    if (!didCommitPreviewDrop) {
       moveTabWithLayoutPipeline({
         tabList: attachTargetTabList,
         draggedTab,
@@ -215,6 +217,7 @@ export const initializeTabDrag = ({
     }
 
     activateDraggedTabInTarget(draggedTab, attachTargetTabList);
+    return flexResult ?? { toWidth: 0, settledRect: null };
   };
 
   const parkProxy = (state) => {
