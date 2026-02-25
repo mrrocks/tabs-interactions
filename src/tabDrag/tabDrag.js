@@ -73,37 +73,13 @@ const bodyDraggingClassName = 'body--tab-dragging';
 const initializedRoots = new WeakSet();
 
 const getDetachReferenceRect = (tabList) => {
-  if (!tabList || typeof tabList.closest !== 'function') {
-    return null;
-  }
-
-  const panel = tabList.closest(panelSelector);
-  if (!panel) {
-    return null;
-  }
-
-  const tabRow = typeof panel.querySelector === 'function' ? panel.querySelector('.tab--row') : null;
-  const baseRect =
-    tabRow && typeof tabRow.getBoundingClientRect === 'function'
-      ? tabRow.getBoundingClientRect()
-      : typeof tabList.getBoundingClientRect === 'function'
-        ? tabList.getBoundingClientRect()
-        : null;
-
-  if (!baseRect) {
-    return null;
-  }
-
-  const paddingTop = typeof globalThis.getComputedStyle === 'function'
-    ? parseFloat(getComputedStyle(panel).paddingTop) || 0
-    : 0;
-
-  return {
-    left: baseRect.left,
-    right: baseRect.right,
-    top: baseRect.top - paddingTop,
-    bottom: baseRect.bottom
-  };
+  const panel = tabList?.closest?.(panelSelector);
+  if (!panel) return null;
+  const tabRow = panel.querySelector?.('.tab--row');
+  const baseRect = (tabRow ?? tabList)?.getBoundingClientRect?.();
+  if (!baseRect) return null;
+  const paddingTop = parseFloat(globalThis.getComputedStyle?.(panel)?.paddingTop) || 0;
+  return { left: baseRect.left, right: baseRect.right, top: baseRect.top - paddingTop, bottom: baseRect.bottom };
 };
 
 const isPointerInsideCurrentHeader = ({ tabList, clientX, clientY, padding = windowAttachPaddingPx }) => {
@@ -265,10 +241,6 @@ export const initializeTabDrag = ({
     };
   };
 
-  const lockToNaturalFlexWidth = (tab) => {
-    measureAndLockFlexWidth(tab);
-  };
-
   const commitDropAttach = ({ draggedTab, attachTargetTabList, pointerClientX }) => {
     placeholderManager.restoreDisplay(draggedTab);
 
@@ -278,7 +250,7 @@ export const initializeTabDrag = ({
     });
 
     if (didCommitPreviewDrop) {
-      lockToNaturalFlexWidth(draggedTab);
+      measureAndLockFlexWidth(draggedTab);
     } else {
       moveTabWithLayoutPipeline({
         tabList: attachTargetTabList,

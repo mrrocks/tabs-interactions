@@ -13,6 +13,7 @@ import {
   snappedPanelFrames
 } from './panelEdgeSnap';
 import { tabItemSelector, tabAddSelector, tabCloseSelector, windowControlsSelector } from '../shared/selectors';
+import { toFiniteNumber } from '../shared/math';
 
 const resizeHitArea = 10;
 const grabCursor = 'grab';
@@ -62,15 +63,9 @@ export const initializePanelInteraction = (panel) => {
     };
   };
 
-  const parsePixels = (value) => {
-    const parsedValue = Number.parseFloat(value);
-
-    return Number.isFinite(parsedValue) ? parsedValue : 0;
-  };
-
   const readPanelMinHeight = () => {
     const styles = window.getComputedStyle(panel);
-    return parsePixels(styles.minHeight);
+    return toFiniteNumber(parseFloat(styles.minHeight));
   };
 
   const setPanelFrame = (nextFrame) => {

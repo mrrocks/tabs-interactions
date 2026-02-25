@@ -66,12 +66,3 @@ export const transitionTo = (ctx, nextPhase) => {
   ctx.previousPhase = ctx.phase;
   ctx.phase = nextPhase;
 };
-
-export const markAsActivated = (ctx) => {
-  ctx.dragStarted = true;
-  ctx.dragMoved = true;
-  transitionTo(ctx, DragPhase.reordering);
-};
-
-export const isActive = (ctx) =>
-  ctx.phase !== DragPhase.idle && ctx.phase !== DragPhase.pressed;

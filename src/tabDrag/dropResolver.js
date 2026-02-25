@@ -8,7 +8,7 @@ const isElementLike = (value) =>
   typeof value.closest === 'function' &&
   typeof value.isConnected === 'boolean';
 
-export const createExpandedRect = (rect, padding) => ({
+const createExpandedRect = (rect, padding) => ({
   left: rect.left - padding,
   right: rect.right + padding,
   top: rect.top - padding,
