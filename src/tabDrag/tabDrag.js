@@ -8,7 +8,8 @@ import {
   createDetachedWindowToggle,
   animatedRemovePanel,
   applyPanelFrame,
-  moveTabToList
+  moveTabToList,
+  panelScaleTransitionMs
 } from '../window/windowManager';
 import { bringToFront, getOverlayZIndex } from '../window/windowFocus';
 import { DragPhase, createDragContext, transitionTo } from './DragContext';
@@ -41,7 +42,8 @@ import { dragTransitionDurationMs, dragTransitionEasing } from './dragAnimationC
 import {
   animateFlexWidthTransition,
   clearDragInlineStyles,
-  applyProxyDetachedStyle
+  applyProxyDetachedStyle,
+  applyProxyAttachedStyle
 } from './styleHelpers';
 import { isPinned, pinnedClassName } from '../tabs/tabPinning';
 import { spawnDetachedWindow, promotePanelToDetached } from './detachedWindowSpawner';
@@ -385,23 +387,38 @@ export const initializeTabDrag = ({
           ctx.dragProxy.style.zIndex = String(getOverlayZIndex());
         }
       }
-      const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
-      const placeholderWidthPx = replacingPlaceholder ? placeholderManager.targetWidthPx() : 0;
-      hoverPreview.createAndAttach(attachTarget);
-      if (isPinned(ctx.draggedTab)) {
-        hoverPreview.previewTab.classList.add(pinnedClassName);
-      }
-      if (replacingPlaceholder) {
-        placeholderManager.replaceWith(hoverPreview.previewTab);
-      }
-      moveTabWithLayoutPipeline({
-        tabList: attachTarget,
-        draggedTab: hoverPreview.previewTab,
-        pointerClientX: clientX
-      });
-      const { displacements } = visualWidth.animateIn(ctx, hoverPreview.previewTab, { fromWidthPx: placeholderWidthPx });
-      if (displacements.length > 0) {
-        animationCoordinator.animateSiblingDisplacement(displacements);
+
+      const reclaimed = visualWidth.reclaimOutgoing(attachTarget);
+      if (reclaimed) {
+        hoverPreview.restore(reclaimed.previewTab, attachTarget);
+        moveTabWithLayoutPipeline({
+          tabList: attachTarget,
+          draggedTab: reclaimed.previewTab,
+          pointerClientX: clientX
+        });
+        const { displacements } = visualWidth.animateIn(ctx, reclaimed.previewTab, { fromWidthPx: reclaimed.currentWidthPx });
+        if (displacements.length > 0) {
+          animationCoordinator.animateSiblingDisplacement(displacements);
+        }
+      } else {
+        const replacingPlaceholder = attachTarget === sourceTabList && placeholderManager.active;
+        const placeholderWidthPx = replacingPlaceholder ? placeholderManager.targetWidthPx() : 0;
+        hoverPreview.createAndAttach(attachTarget);
+        if (isPinned(ctx.draggedTab)) {
+          hoverPreview.previewTab.classList.add(pinnedClassName);
+        }
+        if (replacingPlaceholder) {
+          placeholderManager.replaceWith(hoverPreview.previewTab);
+        }
+        moveTabWithLayoutPipeline({
+          tabList: attachTarget,
+          draggedTab: hoverPreview.previewTab,
+          pointerClientX: clientX
+        });
+        const { displacements } = visualWidth.animateIn(ctx, hoverPreview.previewTab, { fromWidthPx: placeholderWidthPx });
+        if (displacements.length > 0) {
+          animationCoordinator.animateSiblingDisplacement(displacements);
+        }
       }
     } else if (!visualWidth.animatingIn) {
       moveTabWithLayoutPipeline({
@@ -616,9 +633,11 @@ export const initializeTabDrag = ({
         if (!detachTransition.active) {
           const prevPointerEvents = ctx.detachedPanel.style.pointerEvents;
           ctx.detachedPanel.style.pointerEvents = 'none';
-          const wasAttached = hoverPreview.previewTabList != null;
+          const hasActivePreview = hoverPreview.previewTabList != null;
+          const hasReclaimablePreview = visualWidth.outgoingPreviewTab != null;
+          const hadHoverPresence = hasActivePreview || hasReclaimablePreview;
 
-          const shouldUnpark = !wasAttached && ctx.proxyParked && ctx.dragProxy;
+          const shouldUnpark = !hadHoverPresence && ctx.proxyParked && ctx.dragProxy;
           if (shouldUnpark) {
             unparkProxy(ctx, clientX, clientY);
           }
@@ -626,9 +645,29 @@ export const initializeTabDrag = ({
           const didAttach = attachToHoveredTabListFromAttachedDrag(clientX, clientY);
           ctx.detachedPanel.style.pointerEvents = prevPointerEvents;
 
-          if (didAttach && !wasAttached) {
+          const stillReclaimable = visualWidth.outgoingPreviewTab != null;
+          const hoverPresenceLost = hadHoverPresence && !didAttach && !stillReclaimable && hoverPreview.previewTabList == null;
+
+          if (didAttach && !hadHoverPresence) {
             enterHoverAttach(clientX, clientY);
-          } else if (!didAttach && wasAttached) {
+          } else if (didAttach && hasReclaimablePreview && !hasActivePreview) {
+            if (ctx.detachWindowToggle) {
+              ctx.detachWindowToggle.collapse();
+            }
+            if (ctx.dragProxy) {
+              const d = scaleDurationMs(panelScaleTransitionMs);
+              applyProxyDetachedStyle(ctx.dragProxy, { isActive: true, durationMs: d, cancelExisting: true });
+            }
+          } else if (!didAttach && hasActivePreview && stillReclaimable) {
+            if (ctx.detachWindowToggle) {
+              ctx.detachWindowToggle.expand();
+            }
+            if (ctx.dragProxy) {
+              const d = scaleDurationMs(panelScaleTransitionMs);
+              applyProxyAttachedStyle(ctx.dragProxy, { isActive: true, durationMs: d, cancelExisting: true });
+            }
+            ctx.draggedTab.classList.remove(dragSourceClassName);
+          } else if (hoverPresenceLost) {
             leaveHoverAttach(clientX, clientY);
           } else if (shouldUnpark && !didAttach) {
             parkProxy(ctx);
@@ -663,6 +702,10 @@ export const initializeTabDrag = ({
       });
     }
     ctx.detachWindowToggle.collapse();
+    if (ctx.dragProxy) {
+      const d = scaleDurationMs(panelScaleTransitionMs);
+      applyProxyDetachedStyle(ctx.dragProxy, { isActive: true, durationMs: d, cancelExisting: true });
+    }
     if (ctx.detachEdgeSnapPreview) {
       ctx.detachEdgeSnapPreview.hide();
     }

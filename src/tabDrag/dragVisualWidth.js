@@ -12,6 +12,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
   let lastProxyTargetWidthPx = 0;
   let lastTabTargetWidthPx = 0;
 
+  let outgoingPreviewTab = null;
+  let outgoingTabList = null;
+  let outgoingAnimation = null;
+  let outgoingStartWidthPx = 0;
+  const reclaimedPreviews = new WeakSet();
+
   const makeAnimOptions = () => ({
     duration: scaleDurationMs(hoverPreviewExpandDurationMs),
     easing: dragTransitionEasing,
@@ -36,6 +42,13 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
         target.style[prop] = last[prop];
       }
     }
+  };
+
+  const clearOutgoing = () => {
+    outgoingPreviewTab = null;
+    outgoingTabList = null;
+    outgoingAnimation = null;
+    outgoingStartWidthPx = 0;
   };
 
   const cancelAll = () => {
@@ -184,6 +197,10 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     previewTab.style.minWidth = `${currentWidth}px`;
     previewTab.style.maxWidth = `${currentWidth}px`;
 
+    outgoingPreviewTab = previewTab;
+    outgoingTabList = tabList;
+    outgoingStartWidthPx = currentWidth;
+
     const anim = previewTab.animate(
       [
         { minWidth: `${currentWidth}px`, maxWidth: `${currentWidth}px` },
@@ -192,7 +209,16 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       makeAnimOptions()
     );
 
+    outgoingAnimation = anim;
+
     const onDone = () => {
+      if (outgoingPreviewTab === previewTab) {
+        clearOutgoing();
+      }
+      if (reclaimedPreviews.has(previewTab)) {
+        return;
+      }
+
       const siblings = tabList
         ? Array.from(tabList.children).filter((el) => el !== previewTab && el.classList?.contains(tabItemClassName))
         : [];
@@ -205,6 +231,36 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       }
     };
     onAnimationSettled(anim, onDone);
+  };
+
+  const reclaimOutgoing = (targetTabList) => {
+    if (!outgoingPreviewTab || outgoingTabList !== targetTabList) {
+      return null;
+    }
+
+    if (!outgoingPreviewTab.parentNode) {
+      clearOutgoing();
+      return null;
+    }
+
+    const preview = outgoingPreviewTab;
+    const anim = outgoingAnimation;
+
+    const currentWidth = toFiniteNumber(preview.getBoundingClientRect?.().width, 0);
+
+    reclaimedPreviews.add(preview);
+    clearOutgoing();
+
+    if (anim) {
+      anim.cancel();
+    }
+
+    if (currentWidth > 0) {
+      preview.style.minWidth = `${currentWidth}px`;
+      preview.style.maxWidth = `${currentWidth}px`;
+    }
+
+    return { previewTab: preview, currentWidthPx: currentWidth };
   };
 
   const syncWidth = (session, previewTab) => {
@@ -295,11 +351,14 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
   return {
     get animatingIn() { return animatingIn; },
+    get outgoingPreviewTab() { return outgoingPreviewTab; },
+    get outgoingTabList() { return outgoingTabList; },
     animateIn,
     animateOut,
     animateToBaseWidth,
     animateToDetachedWidth,
     cancelAll,
+    reclaimOutgoing,
     reset,
     syncWidth
   };

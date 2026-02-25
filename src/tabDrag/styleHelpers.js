@@ -61,7 +61,25 @@ export const restoreDragInlineStyles = (tab, initialInlineStyles) => {
   }
 };
 
-export const applyProxyDetachedStyle = (proxy, { isActive, durationMs } = {}) => {
+const STYLE_SUB_SELECTORS = ['.tab--background', '.tab--corner-left', '.tab--corner-right'];
+
+const commitAndCancelAnimations = (el) => {
+  const anims = el?.getAnimations?.();
+  if (!anims?.length) return;
+  for (const a of anims) {
+    a.commitStyles();
+    a.cancel();
+  }
+};
+
+const cancelProxySubAnimations = (proxy) => {
+  for (const sel of STYLE_SUB_SELECTORS) {
+    commitAndCancelAnimations(proxy.querySelector?.(sel));
+  }
+};
+
+export const applyProxyDetachedStyle = (proxy, { isActive, durationMs, cancelExisting } = {}) => {
+  if (cancelExisting) cancelProxySubAnimations(proxy);
   const d = durationMs ?? scaleDurationMs(dragTransitionDurationMs);
   if (isActive) {
     animateCornerClipOut(proxy, { durationMs: d });
@@ -70,7 +88,8 @@ export const applyProxyDetachedStyle = (proxy, { isActive, durationMs } = {}) =>
   animateDragShadowIn(proxy, { durationMs: d, isActive });
 };
 
-export const applyProxyAttachedStyle = (proxy, { isActive, durationMs } = {}) => {
+export const applyProxyAttachedStyle = (proxy, { isActive, durationMs, cancelExisting } = {}) => {
+  if (cancelExisting) cancelProxySubAnimations(proxy);
   const d = durationMs ?? scaleDurationMs(dragTransitionDurationMs);
   animateCornerClipIn(proxy, { durationMs: d, fill: 'forwards' });
   animateBackgroundRadiusToAttached(proxy, { durationMs: d, fill: 'forwards' });
@@ -78,6 +97,22 @@ export const applyProxyAttachedStyle = (proxy, { isActive, durationMs } = {}) =>
     durationMs: durationMs ?? scaleDurationMs(dragShadowOutDurationMs),
     isActive
   });
+};
+
+export const animateProxyActivation = (proxy) => {
+  const d = scaleDurationMs(dragTransitionDurationMs);
+  const bg = proxy.querySelector?.('.tab--background');
+  if (!bg) return null;
+  const from = getComputedStyle(bg);
+  const startOpacity = from.opacity;
+  const startTransform = from.transform;
+  return bg.animate(
+    [
+      { opacity: startOpacity, transform: startTransform },
+      { opacity: '1', transform: 'translateY(0) scale(1)' }
+    ],
+    { duration: d, easing: 'ease', fill: 'forwards' }
+  );
 };
 
 export const applyTabAttachedStyle = (tab, { durationMs } = {}) => {

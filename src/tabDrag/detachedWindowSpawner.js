@@ -11,7 +11,7 @@ import {
   shouldRemoveSourceWindowOnDetach,
   resolveSourceActivationIndexAfterDetach
 } from './dragCalculations';
-import { clearDragInlineStyles, applyProxyAttachedStyle } from './styleHelpers';
+import { clearDragInlineStyles, applyProxyAttachedStyle, animateProxyActivation } from './styleHelpers';
 import {
   dragClassName,
   activeDragClassName,
@@ -110,9 +110,14 @@ export const spawnDetachedWindow = (ctx, deps) => {
       if (proxy) {
         const wasInactive = proxy.classList.contains(inactiveDragClassName);
         if (wasInactive) {
-          proxy.classList.remove(dragClassName);
-          proxy.getBoundingClientRect();
-          proxy.classList.remove(inactiveDragClassName);
+          const anim = animateProxyActivation(proxy);
+          proxy.classList.add(activeDragClassName);
+          anim?.finished?.then(() => {
+            proxy.classList.remove(inactiveDragClassName);
+          }).catch(() => {
+            proxy.classList.remove(inactiveDragClassName);
+          });
+        } else {
           proxy.classList.add(activeDragClassName);
         }
         applyProxyAttachedStyle(proxy, { isActive: true });

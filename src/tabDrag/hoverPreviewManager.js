@@ -47,6 +47,11 @@ export const createHoverPreviewManager = ({
     return tab;
   };
 
+  const restore = (tab, tabList) => {
+    previewTab = tab;
+    previewTabList = tabList;
+  };
+
   const commitDrop = ({ draggedTab, attachTargetTabList }) => {
     if (!previewTab || previewTabList !== attachTargetTabList) {
       return false;
@@ -73,6 +78,7 @@ export const createHoverPreviewManager = ({
     clear,
     commitDrop,
     createAndAttach,
-    detach
+    detach,
+    restore
   };
 };

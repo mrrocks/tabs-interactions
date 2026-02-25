@@ -7,7 +7,7 @@ import { bringToFront } from './windowFocus';
 
 export const removePanel = (panel) => safeRemoveElement(panel);
 
-const panelScaleTransitionMs = 250;
+export const panelScaleTransitionMs = 250;
 const panelDetachScale = 0.6;
 
 export const computeFrameFromTabAnchor = ({
@@ -196,12 +196,14 @@ export const createDetachedWindowToggle = ({ panel, tabOffsetInPanel, frame }) =
   };
 
   const collapse = () => {
+    if (animation.playState === 'finished' && animation.playbackRate >= 0) return;
     panel.style.pointerEvents = 'none';
     animation.playbackRate = 1;
     animation.play();
   };
 
   const expand = () => {
+    if (animation.playState === 'finished' && animation.playbackRate < 0) return;
     panel.style.pointerEvents = '';
     animation.playbackRate = -1;
     animation.play();
