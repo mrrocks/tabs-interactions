@@ -68,13 +68,7 @@ const runPanelScaleAnimation = (panel, keyframes, onFinish) => {
   return animation;
 };
 
-export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onTabInserted, onComplete }) => {
-  if (placeholder && typeof placeholder.remove === 'function') {
-    placeholder.remove();
-  }
-  moveTabToList({ tab: draggedTab, tabList });
-  onTabInserted?.();
-
+export const animateDetachedWindowScaleIn = ({ panel, tabOffsetInPanel, tabScreenRect, frame, onComplete }) => {
   const tabCenterX = toFiniteNumber(tabOffsetInPanel.x, 0) + toFiniteNumber(tabScreenRect.width, 0) / 2;
   const tabBottomY = toFiniteNumber(tabOffsetInPanel.y, 0) + toFiniteNumber(tabScreenRect.height, 0);
   const originX = frame.width > 0 ? (tabCenterX / frame.width) * 100 : 50;
@@ -95,6 +89,16 @@ export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, place
       onComplete?.();
     }
   );
+};
+
+export const animateDetachedWindowFromTab = ({ panel, draggedTab, tabList, placeholder, tabOffsetInPanel, tabScreenRect, frame, onTabInserted, onComplete }) => {
+  if (placeholder && typeof placeholder.remove === 'function') {
+    placeholder.remove();
+  }
+  moveTabToList({ tab: draggedTab, tabList });
+  onTabInserted?.();
+
+  animateDetachedWindowScaleIn({ panel, tabOffsetInPanel, tabScreenRect, frame, onComplete });
 };
 
 const createDetachedPanelElements = ({ sourcePanel, sourceTabList }) => {

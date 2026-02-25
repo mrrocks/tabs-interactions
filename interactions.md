@@ -23,6 +23,8 @@
 | Pinned tab detach/reattach to another window                       | P2 — Medium   |                |
 | Tab detach with resistance                                         | P2 — Medium   |                |
 | Dragged tab anchored at pointer during window creation             | P2 — Medium   |                |
+| Instant window creation on detach (no release required)            | P2 — Medium   |                |
+| Edge snap — window tiles to 50% width on viewport edge drag        | P2 — Medium   |                |
 | New tab inserts next to active tab                                 | P2 — Medium   |                |
 
 **Drag implementation note**: In the prototype, the dragged element is a proxy; a visual clone that follows the pointer. The original tab stays in the layout (invisible) to hold its slot. The proxy mirrors the original's dimensions so sibling displacement, resize, and drop positioning all stay in sync with the actual tab bar state.
@@ -38,16 +40,19 @@
 5. Drag a tab to reorder, siblings displace smoothly
 6. Try long pressing a tab to activate the drag state without moving
 7. Drag a tab horizontally, notice the drag is locked to the horizontal axis while attached
-8. Drag a tab downward past the tab bar, feel the resistance building before it detaches into a new window
-9. Drag a detached tab back over a window's tab bar, a hover preview expands to show where it will land
-10. Drop the tab into another window, it attaches at the insertion point
-11. Right-click a tab → Pin, watch the FLIP animation shrink it to icon-only
-12. Right-click a pinned tab → Unpin, width restores with FLIP
-13. Add many tabs until they compress, close button hides at ≤60px
-14. Close the last tab in a window, the window scales down and disappears
-15. Drag a window by its title bar, resize from edges and corners
-16. Toggle "New tab creation" between "Next to active" and "At the end", then add tabs to see the difference
-17. Use the slowdown slider to review any animation at up to 12x
+8. Drag a tab downward past the tab bar, feel the resistance building — the new window appears instantly when the threshold breaks, and follows the pointer
+9. Keep dragging the new window to a viewport edge, watch the ghost preview rectangle appear for the snap zone
+10. Drop on the edge to snap the window to half-screen, or drag away to cancel
+11. Drag a detached tab back over a window's tab bar, a hover preview expands to show where it will land
+12. Drop the tab into another window, it attaches at the insertion point
+13. Right-click a tab → Pin, watch the FLIP animation shrink it to icon-only
+14. Right-click a pinned tab → Unpin, width restores with FLIP
+15. Add many tabs until they compress, close button hides at ≤60px
+16. Close the last tab in a window, the window scales down and disappears
+17. Drag a window by its title bar, resize from edges and corners
+18. Drag a window by its title bar to a viewport edge, then release to snap it to half-screen; drag it away to un-snap
+19. Toggle "New tab creation" between "Next to active" and "At the end", then add tabs to see the difference
+20. Use the slowdown slider to review any animation at up to 12x
 
 ---
 
@@ -211,10 +216,14 @@ The combined effect: the background fades in while rising and scaling up from th
 - Duration: 150ms, easing: ease
 - Re-entering the header expands the placeholder back
 
-**New window creation**:
-- A new window spawns at the tab's anchor point (tab center horizontally, tab bottom vertically as the animation origin)
-- Scales from `0.6` → `1.0` while fading from transparent to fully opaque
-- Duration: 250ms, easing: ease
+**Instant window creation**:
+- The new window is created the moment the detach threshold is crossed, **without waiting for the pointer to be released**
+- The tab is moved into the new window immediately and the drag proxy is cleaned up
+- The window spawns at the tab's anchor point (tab center horizontally, tab bottom vertically as the animation origin)
+- Scales from `0.6` → `1.0` while fading from transparent to fully opaque (duration: 250ms, easing: ease)
+- The window follows the pointer in real-time from the moment it appears — the user can continue dragging it freely
+- The window can be dragged to another window's tab bar (hover-attach) or to a viewport edge (edge snap) without releasing the pointer
+- On pointer release, the window stays at its current position (or snaps to an edge zone if applicable)
 
 ## 9. Cross-Window Drag (Attach)
 
@@ -304,6 +313,37 @@ Available via context menu (right-click / secondary click).
 
 Both demo tools are for review and presentation purposes only — not shipping features.
 
+## 17. Edge Snap (Split-Screen Tiling)
+
+Dragging a window (via title-bar drag or detached-tab drag) to the left or right viewport edge snaps it to half-screen.
+
+**Snap zone detection**:
+- Drop zone width: `5%` of the viewport width from each edge
+- Left zone: `0` to `5%` of viewport width
+- Right zone: `95%` to `100%` of viewport width
+
+**Ghost preview rectangle**:
+- Appears while the pointer is inside a snap zone
+- Background: `rgba(0, 0, 0, 0.15)`, border: `2px dashed rgba(255, 255, 255, 0.6)`, corner radius: `16px`
+- Matches the snapped frame size (50% viewport width, full viewport height), inset `8px` from viewport edges
+- Entrance: fades in from `opacity: 0` + `scale(0.96)` to `opacity: 1` + `scale(1)`, 150ms ease
+- Exit: reverse of entrance, 100ms ease
+- Positioned below the dragged panel in z-order
+
+**Snapped frame**:
+- Width: 50% of viewport width
+- Height: 100% of viewport height
+- Left zone: aligned to left edge (`left: 0`)
+- Right zone: aligned to right edge (`left: 50%`)
+
+**Snap animation**:
+- On drop inside a snap zone, the panel animates to the snapped frame
+- Duration: 200ms, easing: ease
+
+**Un-snap on re-drag**:
+- When starting a title-bar drag on a snapped window, the window restores to its pre-snap size
+- The window is repositioned so the pointer sits at the horizontal center of the pre-snap width
+
 ---
 
 ## Animation Defaults
@@ -320,5 +360,8 @@ Both demo tools are for review and presentation purposes only — not shipping f
 | Window spawn/remove   | 250ms    | ease                                                              |
 | Pin/Unpin FLIP        | 150ms    | ease                                                              |
 | All hover transitions | 150ms    | ease                                                              |
+| Edge snap             | 200ms    | ease                                                              |
+| Snap ghost in         | 150ms    | ease                                                              |
+| Snap ghost out        | 100ms    | ease                                                              |
 
 All durations are subject to the global motion factor for demo purposes.
