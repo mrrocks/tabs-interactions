@@ -248,26 +248,15 @@ export const animatedRemovePanel = (panel, { anchor } = {}) => {
 export const createDetachedWindow = ({
   sourcePanel,
   sourceTabList,
-  tabScreenRect,
-  sourcePanelRect
+  tabScreenRect
 }) => {
   if (typeof document === 'undefined') {
     return null;
   }
 
-  const liveRect = sourcePanel.getBoundingClientRect();
-  const sourceRect = sourcePanelRect?.width > 0 && sourcePanelRect?.height > 0
-    ? sourcePanelRect
-    : liveRect.width > 0 && liveRect.height > 0
-      ? liveRect
-      : sourcePanelRect ?? liveRect;
   const { panel, tabList } = createDetachedPanelElements({ sourcePanel, sourceTabList });
-  const panelWidth = sourceRect.width;
-  const panelHeight = sourceRect.height;
 
   const mountTarget = sourcePanel.parentElement ?? document.body;
-  panel.style.width = `${panelWidth}px`;
-  panel.style.height = `${panelHeight}px`;
   panel.style.visibility = 'hidden';
   mountTarget.append(panel);
 
@@ -275,6 +264,8 @@ export const createDetachedWindow = ({
 
   const panelRect = panel.getBoundingClientRect();
   const placeholderRect = placeholder.getBoundingClientRect();
+  const panelWidth = panelRect.width;
+  const panelHeight = panelRect.height;
   const tabOffsetInPanel = {
     x: placeholderRect.left - panelRect.left,
     y: placeholderRect.top - panelRect.top

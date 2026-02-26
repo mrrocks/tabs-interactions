@@ -53,9 +53,6 @@ export const spawnDetachedWindow = (ctx, deps) => {
   if (!sourcePanel) return;
 
   const isLastTab = shouldRemoveSourceWindowOnDetach(ctx.sourceTabCount);
-  if (isLastTab) {
-    ctx.sourcePanelRect = toRectSnapshot(sourcePanel.getBoundingClientRect());
-  }
 
   const tabScreenRect = toRectSnapshot(
     (ctx.dragProxy ?? ctx.draggedTab).getBoundingClientRect()
@@ -65,8 +62,7 @@ export const spawnDetachedWindow = (ctx, deps) => {
   const detachedWindow = createDetachedWindow({
     sourcePanel,
     sourceTabList,
-    tabScreenRect,
-    sourcePanelRect: ctx.sourcePanelRect
+    tabScreenRect
   });
 
   if (!detachedWindow) return;

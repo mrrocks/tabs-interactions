@@ -1,4 +1,4 @@
-import { isEventTargetElement, toRectSnapshot } from '../shared/dom';
+import { isEventTargetElement } from '../shared/dom';
 import { createPointerFrameLoop } from '../shared/pointerFrameLoop';
 import { scaleDurationMs } from '../motion/motionSpeed';
 import { panelSelector, tabAddSelector, tabCloseSelector } from '../shared/selectors';
@@ -570,15 +570,9 @@ export const initializeTabDrag = ({
           const isLastTab = shouldRemoveSourceWindowOnDetach(ctx.sourceTabCount);
 
           if (isLastTab && !ctx.sourceWindowRemovedDuringDetach) {
-            const sourcePanel =
-              ctx.currentTabList && typeof ctx.currentTabList.closest === 'function'
-                ? ctx.currentTabList.closest(panelSelector)
-                : null;
-            if (sourcePanel) {
-              ctx.sourcePanelRect = toRectSnapshot(sourcePanel.getBoundingClientRect());
-              if (animatedRemovePanel(sourcePanel)) {
-                ctx.sourceWindowRemovedDuringDetach = true;
-              }
+            const sourcePanel = ctx.currentTabList?.closest?.(panelSelector);
+            if (sourcePanel && animatedRemovePanel(sourcePanel)) {
+              ctx.sourceWindowRemovedDuringDetach = true;
             }
           }
 

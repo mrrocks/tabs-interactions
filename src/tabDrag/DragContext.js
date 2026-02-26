@@ -49,7 +49,6 @@ export const createDragContext = ({
   dragProxyBaseRect: null,
 
   lockedTabWidthPx: 0,
-  sourcePanelRect: null,
 
   detachedPanel: null,
   detachedTabList: null,
