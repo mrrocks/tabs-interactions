@@ -19,9 +19,9 @@ import { scaleDurationMs } from '../motion/motionSpeed';
 import { clamp } from '../shared/math';
 
 const resizeHitArea = 10;
-const unsnapThresholdPx = 160;
-const unsnapResistanceFactor = 0.15;
-const unsnapResistanceMaxPx = 20;
+const unsnapThresholdPx = 220;
+const unsnapResistanceFactor = 0.2;
+const unsnapResistanceMaxPx = 35;
 const applyUnsnapResistance = (delta) => clamp(delta * unsnapResistanceFactor, -unsnapResistanceMaxPx, unsnapResistanceMaxPx);
 const grabCursor = 'grab';
 const grabbingCursor = 'grabbing';
