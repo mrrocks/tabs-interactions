@@ -5,7 +5,7 @@ import { clamp } from '../shared/math';
 export const unsnapThresholdPx = 220;
 export const unsnapResistanceFactor = 0.2;
 export const unsnapResistanceMaxPx = 35;
-export const unsnapSizeAnimationMs = 300;
+export const unsnapSizeAnimationMs = 150;
 
 export const applyUnsnapResistance = (delta) =>
   applyResistance(delta, unsnapResistanceFactor, unsnapResistanceMaxPx);
@@ -40,8 +40,8 @@ const edgeSnapZoneFraction = 0.05;
 const ghostInsetPx = 8;
 const ghostBorderRadius = 16;
 const ghostShowDurationMs = 150;
-const ghostHideDurationMs = 100;
-const snapAnimationMs = 200;
+const ghostHideDurationMs = 150;
+const snapAnimationMs = 150;
 
 export const snappedPanelFrames = new WeakMap();
 

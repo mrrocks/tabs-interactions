@@ -7,7 +7,7 @@ import { bringToFront } from './windowFocus';
 
 export const removePanel = (panel) => safeRemoveElement(panel);
 
-export const panelScaleTransitionMs = 250;
+export const panelScaleTransitionMs = 150;
 const panelDetachScale = 0.6;
 
 export const computeFrameFromTabAnchor = ({

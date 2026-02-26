@@ -8,7 +8,7 @@ import { isEventTargetElement } from '../shared/dom';
 import { observeTabCompression, unobserveTabCompression } from './tabCompression';
 import { isPinned } from './tabPinning';
 const noTransitionClassName = 'tab--no-transition';
-const baseDurationMs = 250;
+const baseDurationMs = 150;
 const animationEasing = 'ease';
 const maskFadePx = 80;
 const maskGradient = 'linear-gradient(to right, black calc(100% - var(--creation-reveal-size)), transparent 100%)';
