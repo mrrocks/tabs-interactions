@@ -309,6 +309,17 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
     session.dragProxy.style.maxWidth = `${baseWidthPx}px`;
   };
 
+  const isElementAtWidth = (el, cachedWidth, targetWidthPx) => {
+    const width = cachedWidth > 0
+      ? cachedWidth
+      : toFiniteNumber(el?.getBoundingClientRect?.().width, 0);
+    return width <= 0 || Math.abs(width - targetWidthPx) < 1;
+  };
+
+  const needsWidthUpdate = (session, targetWidthPx) =>
+    !isElementAtWidth(session.dragProxy, lastProxyTargetWidthPx, targetWidthPx) ||
+    !isElementAtWidth(session.draggedTab, lastTabTargetWidthPx, targetWidthPx);
+
   const animateToBaseWidth = (session) => {
     if (!session?.dragProxy) {
       return;
@@ -319,10 +330,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       return;
     }
 
-    const currentWidth = lastProxyTargetWidthPx > 0
-      ? lastProxyTargetWidthPx
-      : toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, 0);
-    if (currentWidth <= 0 || Math.abs(currentWidth - baseWidthPx) < 1) {
+    if (!needsWidthUpdate(session, baseWidthPx)) {
       return;
     }
 
@@ -337,10 +345,7 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       return;
     }
 
-    const currentWidth = lastProxyTargetWidthPx > 0
-      ? lastProxyTargetWidthPx
-      : toFiniteNumber(session.dragProxy.getBoundingClientRect?.().width, 0);
-    if (currentWidth <= 0 || Math.abs(currentWidth - targetWidthPx) < 1) {
+    if (!needsWidthUpdate(session, targetWidthPx)) {
       return;
     }
 

@@ -349,6 +349,12 @@ export const initializeTabDrag = ({
     syncEdgeSnapPreview(clientX);
   };
 
+  const applyDetachedWidthAnimation = () => {
+    if (ctx.dragProxy && !isPinned(ctx.draggedTab) && ctx.detachedWidthPx > 0) {
+      visualWidth.animateToDetachedWidth(ctx, ctx.detachedWidthPx);
+    }
+  };
+
   const attachToHoveredTabListFromAttachedDrag = (clientX, clientY) => {
     if (!ctx || ctx.phase !== DragPhase.reordering && ctx.phase !== DragPhase.detachIntent && ctx.phase !== DragPhase.detachedDragging) {
       return false;
@@ -394,6 +400,9 @@ export const initializeTabDrag = ({
     }
 
     if (!hoverPreview.previewTab || hoverPreview.previewTabList !== attachTarget) {
+      if (attachTarget !== sourceTabList) {
+        ctx.didCrossWindowAttach = true;
+      }
       const targetPanel = attachTarget.closest?.(panelSelector);
       if (targetPanel) {
         bringToFront(targetPanel);
@@ -469,18 +478,6 @@ export const initializeTabDrag = ({
       Math.abs(overshootY) < detachThresholdPx * 0.5
     ) {
       ctx.reattachArmed = true;
-    }
-
-    if (ctx.detachIntentActive) {
-      const hoverTarget = dropResolver.resolveAttachTargetTabList({
-        clientX,
-        clientY,
-        excludedTabList: ctx.currentTabList,
-        padding: windowAttachPaddingPx
-      });
-      if (hoverTarget) {
-        ctx.detachIntentActive = false;
-      }
     }
 
     return { overshootX, overshootY };
@@ -652,9 +649,7 @@ export const initializeTabDrag = ({
         detachTransition.activate({ overshootX, overshootY });
         if (ctx.dragProxy && !isPinned(ctx.draggedTab)) {
           const panel = ctx.currentTabList?.closest?.(panelSelector);
-          const detachedWidth = resolveDetachedTabWidth(panel);
-          ctx.detachedWidthPx = detachedWidth;
-          visualWidth.animateToDetachedWidth(ctx, detachedWidth);
+          ctx.detachedWidthPx = resolveDetachedTabWidth(panel);
         }
         ctx.pendingDetachSpawn = true;
       },
@@ -700,6 +695,10 @@ export const initializeTabDrag = ({
 
         if (ctx.pendingDetachSpawn && !detachTransition.active) {
           ctx.pendingDetachSpawn = false;
+          if (attachToHoveredTabListFromAttachedDrag(clientX, clientY)) {
+            return;
+          }
+          applyDetachedWidthAnimation();
           spawnDetachedWindow(ctx, spawnerDeps);
           if (ctx.detachedPanel) {
             setPhase(DragPhase.detachedDragging);
@@ -880,7 +879,10 @@ export const initializeTabDrag = ({
 
     if (ctx.pendingDetachSpawn) {
       ctx.pendingDetachSpawn = false;
-      spawnDetachedWindow(ctx, spawnerDeps);
+      if (!attachToHoveredTabListFromAttachedDrag(ctx.lastClientX, ctx.lastClientY)) {
+        applyDetachedWidthAnimation();
+        spawnDetachedWindow(ctx, spawnerDeps);
+      }
     }
 
     const completedState = { ...ctx };

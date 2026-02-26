@@ -558,6 +558,14 @@ describe('tab drag integration flows', () => {
 
     const windowListeners = new Map();
     const rootListeners = new Map();
+    let frameToken = 0;
+    let queuedFrameCallback = null;
+    const flushAnimationFrame = () => {
+      if (!queuedFrameCallback) return;
+      const cb = queuedFrameCallback;
+      queuedFrameCallback = null;
+      cb();
+    };
     const windowStub = {
       addEventListener: (type, listener) => {
         windowListeners.set(type, listener);
@@ -566,10 +574,13 @@ describe('tab drag integration flows', () => {
         windowListeners.delete(type);
       },
       requestAnimationFrame: (callback) => {
-        callback();
-        return 1;
+        frameToken += 1;
+        queuedFrameCallback = callback;
+        return frameToken;
       },
-      cancelAnimationFrame: () => {},
+      cancelAnimationFrame: () => {
+        queuedFrameCallback = null;
+      },
       innerWidth: 1400,
       innerHeight: 900
     };
@@ -664,6 +675,9 @@ describe('tab drag integration flows', () => {
 
     const previousRAF = globalThis.requestAnimationFrame;
     const previousCAF = globalThis.cancelAnimationFrame;
+    const realPerfNow = performance.now.bind(performance);
+    let timeOffsetMs = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => realPerfNow() + timeOffsetMs);
 
     globals.apply(windowStub, documentStub, ElementStub);
     globalThis.requestAnimationFrame = windowStub.requestAnimationFrame;
@@ -679,29 +693,35 @@ describe('tab drag integration flows', () => {
         clientX: 80,
         clientY: 30
       });
+
       windowListeners.get('pointermove')({
         pointerId: 7,
         clientX: 110,
         clientY: 30
       });
+      flushAnimationFrame();
+
       windowListeners.get('pointermove')({
         pointerId: 7,
         clientX: 560,
         clientY: 30
       });
+      flushAnimationFrame();
 
-      expect(sourceDraggedTab.parentNode).toBe(sourceTabList);
-      expect(
-        getTabNodes(targetTabList)
-          .map((tab) => tab.id)
-          .filter(Boolean)
-      ).toEqual(['tab-b', 'tab-c']);
+      timeOffsetMs += 300;
+      while (queuedFrameCallback) {
+        flushAnimationFrame();
+      }
 
       windowListeners.get('pointerup')({
         pointerId: 7,
         clientX: 560,
         clientY: 30
       });
+      timeOffsetMs += 300;
+      while (queuedFrameCallback) {
+        flushAnimationFrame();
+      }
 
       expect(sourceDraggedTab.parentNode).toBe(targetTabList);
       expect(
@@ -716,6 +736,7 @@ describe('tab drag integration flows', () => {
       ).toContain('tab-a');
       expect(getTabNodes(targetTabList).every((tab) => Boolean(tab.id))).toBe(true);
     } finally {
+      performance.now.mockRestore?.();
       globals.restore();
       globalThis.requestAnimationFrame = previousRAF;
       globalThis.cancelAnimationFrame = previousCAF;

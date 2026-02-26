@@ -15,10 +15,12 @@ export const setFlexLock = (el, widthPx) => {
   el.style.maxWidth = `${widthPx}px`;
 };
 
+export const FLEX_LOCK_KEYS = ['flex', 'flexBasis', 'minWidth', 'maxWidth'];
+
 export const clearFlexLock = (el) => {
-  el.style.flex = '';
-  el.style.minWidth = '';
-  el.style.maxWidth = '';
+  for (const key of FLEX_LOCK_KEYS) {
+    el.style[key] = '';
+  }
 };
 
 export const animateFlexWidthTransition = (el, { durationMs, easing }) => {

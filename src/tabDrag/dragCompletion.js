@@ -16,7 +16,7 @@ import {
 } from './dragCalculations';
 import { animateDragShadowOut } from './dragShadowAnimation';
 import { dragTransitionDurationMs, dragShadowOutDurationMs, dragTransitionEasing } from './dragAnimationConfig';
-import { applyTabAttachedStyle, applyProxyAttachedStyle } from './styleHelpers';
+import { applyTabAttachedStyle, applyProxyAttachedStyle, clearFlexLock, FLEX_LOCK_KEYS } from './styleHelpers';
 import { captureSourceActivation } from './detachedWindowSpawner';
 import {
   computeSnappedFrame,
@@ -24,6 +24,13 @@ import {
   snappedPanelFrames
 } from '../panel/panelEdgeSnap';
 import { activeDragClassName } from './dragClassNames';
+
+const clearInitialWidthStyles = (completedState) => {
+  const s = completedState.initialInlineStyles;
+  for (const key of FLEX_LOCK_KEYS) {
+    s[key] = '';
+  }
+};
 
 const syncProxyWidthToTarget = (proxy, targetWidth) => {
   if (!(targetWidth > 0) || typeof proxy.animate !== 'function') return;
@@ -61,6 +68,7 @@ export const settleDetachedDrag = (completedState, deps) => {
       pointerClientX: completedState.lastClientX
     });
 
+    clearInitialWidthStyles(completedState);
     dragDomAdapter.restoreDraggedTabStyles(completedState);
 
     if (proxy) {
@@ -99,6 +107,8 @@ export const settleDetachedDrag = (completedState, deps) => {
     removePanel(completedState.detachedPanel);
   } else {
     tab.style.visibility = '';
+    visualWidth.cancelAll();
+    clearFlexLock(tab);
     dragDomAdapter.restoreDraggedTabStyles(completedState);
     dragDomAdapter.removeDragProxy(proxy);
   }
@@ -142,21 +152,26 @@ export const settleAttachedDrag = (completedState, deps) => {
     visualWidth, placeholderManager, commitDropAttach } = deps;
 
   const cleanupVisualState = () => {
-    const tabList = completedState.draggedTab.parentNode;
+    const tab = completedState.draggedTab;
+    const tabList = tab.parentNode;
     const siblings = tabList
-      ? getTabs(tabList).filter((t) => t !== completedState.draggedTab)
+      ? getTabs(tabList).filter((t) => t !== tab)
       : [];
     const snapshot = snapshotSiblingPositions(siblings);
 
     dragDomAdapter.cleanupVisualState(completedState);
+
+    if (tabList && tabList !== completedState.currentTabList) {
+      clearFlexLock(tab);
+    }
 
     const displacements = computeDisplacements(siblings, snapshot);
     if (displacements.length > 0) {
       animationCoordinator.animateSiblingDisplacement(displacements);
     }
 
-    if (completedState.draggedTab.classList.contains(activeTabClassName)) {
-      applyTabAttachedStyle(completedState.draggedTab);
+    if (tab.classList.contains(activeTabClassName)) {
+      applyTabAttachedStyle(tab);
     }
   };
 
@@ -219,8 +234,11 @@ export const settleAttachedDrag = (completedState, deps) => {
       attachTargetTabList,
       pointerClientX: completedState.lastClientX
     });
-    if (isCrossListAttach && shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
-      animatedRemovePanel(sourcePanel);
+    if (isCrossListAttach) {
+      clearInitialWidthStyles(completedState);
+      if (shouldCloseSourcePanelAfterTransfer({ sourceTabCountAfterMove: getTabs(sourceTabList).length })) {
+        animatedRemovePanel(sourcePanel);
+      }
     }
     activateInSource?.();
   }
@@ -229,6 +247,7 @@ export const settleAttachedDrag = (completedState, deps) => {
   hoverPreview.clear();
   if (dropDestination === 'attach') {
     visualWidth.cancelAll();
+    clearFlexLock(completedState.draggedTab);
   } else {
     visualWidth.reset(completedState);
   }
