@@ -3,16 +3,9 @@ import puppeteer from 'puppeteer';
 const BASE_URL = 'http://localhost:5173';
 const VIEWPORT = { width: 1280, height: 800 };
 const DETACH_OVERSHOOT = 130;
-// Scale animation duration. Samples before this elapsed-since-spawn mark are
-// "during animation"; samples after are expected to be clean.
-const SCALE_ANIM_MS = 180;
-// Drift threshold for the final convergence window (last 30ms of animation).
-// Observed: converges to exactly 0px. 3px provides headroom for rendering variance.
-const MAX_DRIFT_CONVERGENCE_PX = 3;
-// Max permitted drift at any point during the animation. The scale animation
-// causes ~44px geometric offset at peak (scale=0.6, tab ~185px wide). This
-// threshold catches catastrophic regressions where sync is broken entirely.
-const MAX_DRIFT_ANIMATION_PX = 60;
+// At the sync point (right after applyPanelFrame), the correction is exact.
+// 1px tolerance covers sub-pixel rounding in getBoundingClientRect.
+const MAX_DRIFT_AT_SYNC_PX = 1;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -57,51 +50,59 @@ const getTabCenter = (page, panelSelector, tabIndex) =>
 const getPanelCount = (page) => page.$$eval('.browser', (els) => els.length);
 
 /**
- * Injects a rAF-driven sampler into the page. It runs continuously and records
- * { t, driftX, driftY } for every frame where:
- *   - a detached panel exists (.browser count >= 2)
- *   - the drag proxy is still active (pointerEvents !== 'none')
+ * Injects a MutationObserver-based sampler. It fires as a microtask immediately
+ * after each applyPanelFrame call (which sets panel.style.left/top/width/height),
+ * so the measurement happens right after the scale correction has been applied.
  *
- * Because sampling happens inside the browser process, it captures the full
- * ~150ms scale-animation window at ~60 fps without CDP roundtrip latency.
+ * This avoids the rAF-ordering artifact where a requestAnimationFrame sampler
+ * could fire before the app's sync rAF within the same frame.
  *
- * The "t" value is ms since the sampler was started (performance.now() based).
- * spawnT is set to the first frame where the detached panel appears, allowing
- * post-analysis bucketing relative to spawn time.
+ * Captures until proxy.style.pointerEvents === 'none' (fadeOutProxy fired).
  */
 const injectSampler = (page) =>
   page.evaluate(() => {
     window.__alignSamples = [];
     window.__alignSpawnT = null;
+    window.__panelStyleObserver = null;
 
-    const tick = () => {
+    const captureAlignment = (panel) => {
       const proxy = document.querySelector('.tab--drag-proxy');
-      const panels = document.querySelectorAll('.browser');
-      const hasDetached = panels.length >= 2;
-      const proxyActive = proxy && proxy.style.pointerEvents !== 'none';
-
-      if (hasDetached && window.__alignSpawnT === null) {
-        window.__alignSpawnT = performance.now();
+      if (!proxy || proxy.style.pointerEvents === 'none') {
+        window.__panelStyleObserver?.disconnect();
+        window.__panelStyleObserver = null;
+        return;
       }
-
-      if (hasDetached && proxyActive) {
-        const panel = panels[panels.length - 1];
-        const tab = panel?.querySelector('.tab--item');
-        if (tab) {
-          const pr = proxy.getBoundingClientRect();
-          const tr = tab.getBoundingClientRect();
-          window.__alignSamples.push([
-            Math.round(performance.now() - (window.__alignSpawnT ?? performance.now())),
-            parseFloat((pr.left - tr.left).toFixed(1)),
-            parseFloat((pr.top - tr.top).toFixed(1))
-          ]);
-        }
-      }
-
-      requestAnimationFrame(tick);
+      const tab = panel.querySelector('.tab--item');
+      if (!tab) return;
+      if (window.__alignSpawnT === null) window.__alignSpawnT = performance.now();
+      const pr = proxy.getBoundingClientRect();
+      const tr = tab.getBoundingClientRect();
+      window.__alignSamples.push([
+        Math.round(performance.now() - window.__alignSpawnT),
+        parseFloat((pr.left - tr.left).toFixed(1)),
+        parseFloat((pr.top - tr.top).toFixed(1))
+      ]);
     };
 
-    requestAnimationFrame(tick);
+    // Watch for the detached panel to be added to the DOM
+    const bodyObserver = new MutationObserver(() => {
+      const panels = document.querySelectorAll('.browser');
+      if (panels.length < 2 || window.__panelStyleObserver) return;
+      const panel = panels[panels.length - 1];
+
+      // Observe style attribute changes on the panel — fires as a microtask
+      // immediately after each applyPanelFrame call.
+      window.__panelStyleObserver = new MutationObserver(() => {
+        captureAlignment(panel);
+      });
+      window.__panelStyleObserver.observe(panel, {
+        attributes: true,
+        attributeFilter: ['style']
+      });
+      bodyObserver.disconnect();
+    });
+
+    bodyObserver.observe(document.body, { childList: true, subtree: true });
   });
 
 const readSamples = (page) =>
@@ -167,38 +168,87 @@ const run = async () => {
     await disableMotion();
   };
 
-  /**
-   * Analyses the in-page samples. Buckets into:
-   *   peak    — all samples (overall max drift, i.e. animation peak)
-   *   tail    — last 30ms of animation (convergence window)
-   * Returns stats objects and raw buckets.
-   */
-  const analyzeSamples = (samples, label) => {
-    if (!samples.length) {
-      console.log(`  ${label}: no samples collected`);
-      return { peakStats: null, tailStats: null };
-    }
-    const maxT = Math.max(...samples.map((s) => s[0]));
-    const tailMs = 30;
-    const tail = samples.filter((s) => s[0] >= maxT - tailMs);
-    const peakStats = driftStats(samples);
-    const tailStats = driftStats(tail);
-
-    console.log(`  ${label} (${peakStats.count} samples, t=0..${maxT}ms): driftX peak=${peakStats.maxX.toFixed(1)}px avg=${peakStats.avgX.toFixed(1)}px | driftY peak=${peakStats.maxY.toFixed(1)}px avg=${peakStats.avgY.toFixed(1)}px`);
-    console.log(`  ${label} convergence (last ${tailMs}ms, ${tailStats?.count ?? 0} samples): driftX=${tailStats?.maxX.toFixed(1) ?? 'n/a'}px | driftY=${tailStats?.maxY.toFixed(1) ?? 'n/a'}px`);
-    console.log(`  All samples: ${formatLog(samples)}`);
-
-    return { peakStats, tailStats };
-  };
-
-  // ── Test 1: Slow detach, stationary — baseline alignment ───────────────────
-  console.log('Test 1: Slow detach, stationary — baseline proxy/window alignment');
+  // ── Test 1: Fast detach + fast continued movement ──────────────────────────
+  // Primary test: reproduces the user's scenario. Samples alignment immediately
+  // after each applyPanelFrame (right after scale correction is applied). With
+  // the fix, drift at each sync point should be ~0px.
+  console.log('Test 1: Fast detach + fast movement — proxy/window alignment at each sync point');
 
   await disableMotion();
   await injectSampler(page);
 
   let countBefore = await getPanelCount(page);
   let tabCenter = await getTabCenter(page, '.browser', 1);
+  if (!tabCenter) {
+    console.error('  No second tab found');
+    await browser.close();
+    process.exit(1);
+  }
+
+  await pointerMove(session, tabCenter.x, tabCenter.y);
+  await sleep(50);
+  await pointerDown(session, tabCenter.x, tabCenter.y);
+  await dragSteps(
+    session,
+    tabCenter,
+    { x: tabCenter.x, y: tabCenter.y + DETACH_OVERSHOOT + 60 },
+    60,
+    0
+  );
+
+  if (!await waitForDetach(page, countBefore, 2000)) {
+    console.error('  Detach never triggered — aborting');
+    await pointerUp(session, tabCenter.x, tabCenter.y + DETACH_OVERSHOOT + 60);
+    await browser.close();
+    process.exit(1);
+  }
+
+  // Continue fast horizontal movement to drive sync calls through the animation
+  const fixedY = tabCenter.y + DETACH_OVERSHOOT + 60;
+  let curX = tabCenter.x;
+  let direction = 1;
+  const stressDeadline = Date.now() + 400;
+
+  while (Date.now() < stressDeadline) {
+    curX += direction * 10;
+    if (curX > VIEWPORT.width - 150 || curX < 150) direction *= -1;
+    await pointerMove(session, curX, fixedY);
+    await sleep(16);
+  }
+
+  await pointerUp(session, curX, fixedY);
+  await sleep(200);
+
+  const t1Samples = await readSamples(page);
+  const t1Stats = driftStats(t1Samples);
+
+  if (t1Stats) {
+    console.log(`  ${t1Stats.count} sync-point samples, t=0..${Math.max(...t1Samples.map((s) => s[0]))}ms`);
+    console.log(`  driftX max=${t1Stats.maxX.toFixed(1)}px avg=${t1Stats.avgX.toFixed(1)}px | driftY max=${t1Stats.maxY.toFixed(1)}px avg=${t1Stats.avgY.toFixed(1)}px`);
+    console.log(`  All samples: ${formatLog(t1Samples)}`);
+    assert(
+      t1Stats.maxX < MAX_DRIFT_AT_SYNC_PX,
+      `Fast-detach driftX at sync < ${MAX_DRIFT_AT_SYNC_PX}px: got ${t1Stats.maxX.toFixed(1)}px`
+    );
+    assert(
+      t1Stats.maxY < MAX_DRIFT_AT_SYNC_PX,
+      `Fast-detach driftY at sync < ${MAX_DRIFT_AT_SYNC_PX}px: got ${t1Stats.maxY.toFixed(1)}px`
+    );
+  } else {
+    console.error('  No sync-point samples collected');
+  }
+
+  // ── Test 2: Slow detach + stationary ───────────────────────────────────────
+  // Baseline: rAF loop is the only source of sync calls (no pointer movement).
+  // In headless mode rAF fires less often, so fewer samples. Still verifies
+  // each sync point achieves near-zero drift.
+  console.log('\nTest 2: Slow detach, stationary — alignment at each rAF sync point');
+
+  await resetPage();
+  await injectSampler(page);
+
+  countBefore = await getPanelCount(page);
+  tabCenter = await getTabCenter(page, '.browser', 1);
   if (!tabCenter) {
     console.error('  No second tab found');
     await browser.close();
@@ -225,104 +275,35 @@ const run = async () => {
     process.exit(1);
   }
 
+  // Hold position — sync driven only by the rAF loop, no pointer events
   await sleep(400);
   await pointerUp(session, tabCenter.x, tabCenter.y + DETACH_OVERSHOOT);
   await sleep(200);
 
-  const t1Samples = await readSamples(page);
-  const { peakStats: t1Peak, tailStats: t1Tail } = analyzeSamples(t1Samples, 'T1 stationary');
-
-  if (t1Peak) {
-    assert(
-      t1Peak.maxX < MAX_DRIFT_ANIMATION_PX,
-      `Slow-detach peak driftX < ${MAX_DRIFT_ANIMATION_PX}px: got ${t1Peak.maxX.toFixed(1)}px`
-    );
-  }
-  if (t1Tail) {
-    assert(
-      t1Tail.maxX < MAX_DRIFT_CONVERGENCE_PX,
-      `Slow-detach convergence driftX < ${MAX_DRIFT_CONVERGENCE_PX}px: got ${t1Tail.maxX.toFixed(1)}px`
-    );
-    assert(
-      t1Tail.maxY < MAX_DRIFT_CONVERGENCE_PX,
-      `Slow-detach convergence driftY < ${MAX_DRIFT_CONVERGENCE_PX}px: got ${t1Tail.maxY.toFixed(1)}px`
-    );
-  }
-
-  // ── Test 2: Fast detach + fast continued movement — stress alignment ────────
-  console.log('\nTest 2: Fast detach + fast movement — stress alignment');
-
-  await resetPage();
-  await injectSampler(page);
-
-  countBefore = await getPanelCount(page);
-  tabCenter = await getTabCenter(page, '.browser', 1);
-  if (!tabCenter) {
-    console.error('  No second tab found');
-    await browser.close();
-    process.exit(1);
-  }
-
-  await pointerMove(session, tabCenter.x, tabCenter.y);
-  await sleep(50);
-  await pointerDown(session, tabCenter.x, tabCenter.y);
-  // Fast downward drag — no inter-step delay to maximise mouse speed at spawn
-  await dragSteps(
-    session,
-    tabCenter,
-    { x: tabCenter.x, y: tabCenter.y + DETACH_OVERSHOOT + 60 },
-    60,
-    0
-  );
-
-  if (!await waitForDetach(page, countBefore, 2000)) {
-    console.error('  Detach never triggered — aborting');
-    await pointerUp(session, tabCenter.x, tabCenter.y + DETACH_OVERSHOOT + 60);
-    await browser.close();
-    process.exit(1);
-  }
-
-  // Continue moving horizontally fast for 400ms to sample the post-animation period
-  const fixedY = tabCenter.y + DETACH_OVERSHOOT + 60;
-  let curX = tabCenter.x;
-  let direction = 1;
-  const stressDeadline = Date.now() + 400;
-
-  while (Date.now() < stressDeadline) {
-    curX += direction * 10;
-    if (curX > VIEWPORT.width - 150 || curX < 150) direction *= -1;
-    await pointerMove(session, curX, fixedY);
-    await sleep(16);
-  }
-
-  await pointerUp(session, curX, fixedY);
-  await sleep(200);
-
   const t2Samples = await readSamples(page);
-  const { peakStats: t2Peak, tailStats: t2Tail } = analyzeSamples(t2Samples, 'T2 fast-move');
+  const t2Stats = driftStats(t2Samples);
 
-  if (t2Peak) {
+  if (t2Stats) {
+    console.log(`  ${t2Stats.count} sync-point samples`);
+    console.log(`  driftX max=${t2Stats.maxX.toFixed(1)}px avg=${t2Stats.avgX.toFixed(1)}px | driftY max=${t2Stats.maxY.toFixed(1)}px avg=${t2Stats.avgY.toFixed(1)}px`);
+    if (t2Samples.length <= 20) console.log(`  All samples: ${formatLog(t2Samples)}`);
     assert(
-      t2Peak.maxX < MAX_DRIFT_ANIMATION_PX,
-      `Fast-detach peak driftX < ${MAX_DRIFT_ANIMATION_PX}px: got ${t2Peak.maxX.toFixed(1)}px`
-    );
-  }
-  if (t2Tail) {
-    assert(
-      t2Tail.maxX < MAX_DRIFT_CONVERGENCE_PX,
-      `Fast-detach convergence driftX < ${MAX_DRIFT_CONVERGENCE_PX}px: got ${t2Tail.maxX.toFixed(1)}px`
+      t2Stats.maxX < MAX_DRIFT_AT_SYNC_PX,
+      `Slow-detach driftX at sync < ${MAX_DRIFT_AT_SYNC_PX}px: got ${t2Stats.maxX.toFixed(1)}px`
     );
     assert(
-      t2Tail.maxY < MAX_DRIFT_CONVERGENCE_PX,
-      `Fast-detach convergence driftY < ${MAX_DRIFT_CONVERGENCE_PX}px: got ${t2Tail.maxY.toFixed(1)}px`
+      t2Stats.maxY < MAX_DRIFT_AT_SYNC_PX,
+      `Slow-detach driftY at sync < ${MAX_DRIFT_AT_SYNC_PX}px: got ${t2Stats.maxY.toFixed(1)}px`
     );
+  } else {
+    console.log('  No sync-point samples (rAF may have been throttled before proxy parked)');
   }
 
   // ── Test 3: Spawn-moment snapshot ──────────────────────────────────────────
   // Tight-polls for the newly-created panel and captures panel CSS + proxy/tab
   // positions as early as the CDP roundtrip allows (~10-30ms after spawn).
-  // Since applyPanelFrame runs synchronously inside createDetachedWindow before
-  // the panel becomes visible, panel CSS left/top is already set when we read it.
+  // With the fix, the panel CSS position accounts for the spawn-time scale so
+  // tab.getBoundingClientRect() should match proxy.getBoundingClientRect().
   console.log('\nTest 3: Spawn-moment — positional snapshot at window creation');
 
   await resetPage();
@@ -384,15 +365,13 @@ const run = async () => {
       const spawnDriftX = parseFloat((proxyLeft - tabLeft).toFixed(1));
       const spawnDriftY = parseFloat((proxyTop - tabTop).toFixed(1));
       console.log(`  Spawn-moment drift: driftX=${spawnDriftX}px  driftY=${spawnDriftY}px`);
-      // Loose threshold: scale animation is expected to cause drift here;
-      // this catches gross JS-level misalignment, not animation-induced offset.
       assert(
-        Math.abs(spawnDriftX) < 30,
-        `Spawn-moment driftX < 30px (diagnostic): got ${spawnDriftX}px`
+        Math.abs(spawnDriftX) < 5,
+        `Spawn-moment driftX < 5px: got ${spawnDriftX}px`
       );
       assert(
-        Math.abs(spawnDriftY) < 30,
-        `Spawn-moment driftY < 30px (diagnostic): got ${spawnDriftY}px`
+        Math.abs(spawnDriftY) < 5,
+        `Spawn-moment driftY < 5px: got ${spawnDriftY}px`
       );
     } else {
       console.log('  Proxy or tab not found at spawn moment');

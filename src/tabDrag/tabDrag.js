@@ -336,8 +336,27 @@ export const initializeTabDrag = ({
     const offset = ctx.detachedTabOffsetInPanel;
     const frame = ctx.detachedPanelFrame;
 
-    frame.left = proxyRect.left - offset.x;
-    frame.top = proxyRect.top - offset.y;
+    let corrX = 0;
+    let corrY = 0;
+
+    const transformOrigin = ctx.detachedPanel.style.transformOrigin;
+    if (transformOrigin) {
+      const computedTransform = window.getComputedStyle(ctx.detachedPanel).transform;
+      if (computedTransform && computedTransform !== 'none') {
+        const m = computedTransform.match(/^matrix\(([^,]+),/);
+        const s = m ? parseFloat(m[1]) : 1;
+        if (s < 1) {
+          const parts = transformOrigin.split(' ');
+          const oxAbs = parseFloat(parts[0]) / 100 * frame.width;
+          const oyAbs = parseFloat(parts[1]) / 100 * frame.height;
+          corrX = -(oxAbs - offset.x) * (1 - s);
+          corrY = -(oyAbs - offset.y) * (1 - s);
+        }
+      }
+    }
+
+    frame.left = proxyRect.left - offset.x + corrX;
+    frame.top = proxyRect.top - offset.y + corrY;
     applyPanelFrame(ctx.detachedPanel, frame);
 
     syncEdgeSnapPreview(clientX);
@@ -695,6 +714,12 @@ export const initializeTabDrag = ({
           applyDetachedWidthAnimation();
           spawnDetachedWindow(ctx, spawnerDeps);
           if (ctx.detachedPanel) {
+            const syncDuringScaleAnim = () => {
+              if (!ctx || ctx.proxyParked) return;
+              syncDetachedPanelToProxy(ctx.lastClientX ?? clientX);
+              requestAnimationFrame(syncDuringScaleAnim);
+            };
+            requestAnimationFrame(syncDuringScaleAnim);
             setPhase(DragPhase.detachedDragging);
             return;
           }
