@@ -1,6 +1,7 @@
 import { panelSelector } from '../shared/selectors';
 
 const initializedRoots = new WeakSet();
+const focusedClass = 'browser--focused';
 let topZIndex = 0;
 let topPanel = null;
 
@@ -11,9 +12,14 @@ export const bringToFront = (panel) => {
     return;
   }
 
+  if (topPanel) {
+    topPanel.classList.remove(focusedClass);
+  }
+
   topZIndex += 1;
   topPanel = panel;
   panel.style.zIndex = String(topZIndex);
+  panel.classList.add(focusedClass);
 };
 
 export const initializeWindowFocus = (root = document) => {

@@ -138,7 +138,8 @@ body
   --panel-min-height: 80px
   --tab-default-width: 244px
   --tab-min-width: 44px
-  --window-drop-shadow: 0 20px 48px rgba(0, 0, 0, 0.2), 0 8px 20px rgba(0, 0, 0, 0.1)
+  --window-shadow-focused: 0 20px 48px rgba(0, 0, 0, 0.2), 0 8px 20px rgba(0, 0, 0, 0.1)
+  --window-shadow-unfocused: 0 20px 48px rgba(0, 0, 0, 0), 0 8px 20px rgba(0, 0, 0, 0)
 
   position: fixed
   left: calc(50vw - var(--panel-default-width) / 2)
@@ -149,13 +150,17 @@ body
   min-height: var(--panel-min-height)
   border-radius: 16px
   background: var(--bg-surface-backdrop)
-  box-shadow: var(--window-drop-shadow)
+  box-shadow: var(--window-shadow-unfocused)
+  transition: box-shadow var(--motion-transition-standard)
   padding-top: 4px
   contain: layout paint
   cursor: grab
   touch-action: none
   user-select: none
   will-change: left, top, width, height
+
+  &.browser--focused
+    box-shadow: var(--window-shadow-focused)
 
   .tab--row
     height: 40px

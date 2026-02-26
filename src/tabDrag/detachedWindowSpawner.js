@@ -119,7 +119,11 @@ export const spawnDetachedWindow = (ctx, deps) => {
   if (proxy) {
     const wasInactive = proxy.classList.contains(inactiveDragClassName);
     cancelProxySubAnimations(proxy);
-    if (wasInactive) animateProxyActivation(proxy);
+    if (wasInactive) {
+      animateProxyActivation(proxy);
+      proxy.classList.remove(inactiveDragClassName);
+      proxy.classList.add(activeDragClassName);
+    }
     applyProxyAttachedStyle(proxy, { isActive: true });
   }
 
