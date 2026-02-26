@@ -1,4 +1,4 @@
-import { toRectSnapshot, onAnimationSettled } from '../shared/dom';
+import { toRectSnapshot } from '../shared/dom';
 import { panelSelector } from '../shared/selectors';
 import { activeTabClassName } from '../tabs/tabState';
 import { getTabs, setActiveTab } from '../tabs/tabs';
@@ -79,50 +79,24 @@ export const spawnDetachedWindow = (ctx, deps) => {
   const proxy = ctx.dragProxy;
   let scaleInCompleted = false;
 
-  const onScaleInComplete = () => {
+  const swapAndPark = () => {
     scaleInCompleted = true;
     clearTimeout(scaleInFallbackId);
 
-    const liveCtx = getCtx();
-    if (!liveCtx || liveCtx.dragProxy !== proxy) {
-      tab.style.visibility = '';
+    const currentCtx = getCtx();
+    tab.style.visibility = '';
+    if (!currentCtx || currentCtx.dragProxy !== proxy) {
       dragDomAdapter.removeDragProxy(proxy);
       return;
     }
-    if (liveCtx.proxyParked || hoverPreview.previewTabList != null) {
+    if (currentCtx.proxyParked || hoverPreview.previewTabList != null) {
       return;
     }
-
-    const wasInactive = proxy.classList.contains(inactiveDragClassName);
-    cancelProxySubAnimations(proxy);
-    const activationAnim = wasInactive ? animateProxyActivation(proxy) : null;
-    applyProxyAttachedStyle(proxy, { isActive: true });
-
-    const swapAndPark = () => {
-      const currentCtx = getCtx();
-      tab.style.visibility = '';
-      if (!currentCtx || currentCtx.dragProxy !== proxy) {
-        dragDomAdapter.removeDragProxy(proxy);
-        return;
-      }
-      if (currentCtx.proxyParked || hoverPreview.previewTabList != null) {
-        return;
-      }
-      fadeOutProxy(currentCtx, currentCtx.lastClientX, currentCtx.lastClientY);
-    };
-
-    const morphAnim = activationAnim
-      ?? proxy.querySelector('.tab--background')?.getAnimations?.()[0]
-      ?? null;
-    if (morphAnim) {
-      onAnimationSettled(morphAnim, swapAndPark);
-    } else {
-      swapAndPark();
-    }
+    fadeOutProxy(currentCtx, currentCtx.lastClientX, currentCtx.lastClientY);
   };
 
   const scaleInFallbackId = setTimeout(() => {
-    if (!scaleInCompleted) onScaleInComplete();
+    if (!scaleInCompleted) swapAndPark();
   }, scaleDurationMs(300));
 
   animateDetachedWindowFromTab({
@@ -139,8 +113,15 @@ export const spawnDetachedWindow = (ctx, deps) => {
       tab.classList.remove(noTransitionClassName);
       setActiveTab(detachedWindow.tabList, 0);
     },
-    onComplete: onScaleInComplete
+    onComplete: swapAndPark
   });
+
+  if (proxy) {
+    const wasInactive = proxy.classList.contains(inactiveDragClassName);
+    cancelProxySubAnimations(proxy);
+    if (wasInactive) animateProxyActivation(proxy);
+    applyProxyAttachedStyle(proxy, { isActive: true });
+  }
 
   ctx.detachedPanel = detachedWindow.panel;
   ctx.detachedTabList = detachedWindow.tabList;
