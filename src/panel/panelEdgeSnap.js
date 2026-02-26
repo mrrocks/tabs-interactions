@@ -1,4 +1,40 @@
 import { scaleDurationMs } from '../motion/motionSpeed';
+import { applyResistance } from '../tabDrag/dragCalculations';
+import { clamp } from '../shared/math';
+
+export const unsnapThresholdPx = 220;
+export const unsnapResistanceFactor = 0.2;
+export const unsnapResistanceMaxPx = 35;
+export const unsnapSizeAnimationMs = 300;
+
+export const applyUnsnapResistance = (delta) =>
+  applyResistance(delta, unsnapResistanceFactor, unsnapResistanceMaxPx);
+
+export const computeGrabRatio = (pointerX, pointerY, frame) => ({
+  x: (pointerX - frame.left) / frame.width,
+  y: (pointerY - frame.top) / frame.height
+});
+
+export const computeUnsnapPositionOffset = (resistedLeft, resistedTop, grabLeft, grabTop, snappedWidth, targetWidth) => ({
+  dx: resistedLeft - grabLeft,
+  dy: resistedTop - grabTop,
+  startWidth: snappedWidth,
+  targetWidth
+});
+
+export const blendUnsnapPosition = (pointerX, pointerY, grabRatio, animatedWidth, animatedHeight, positionOffset) => {
+  let left = pointerX - animatedWidth * grabRatio.x;
+  let top = pointerY - animatedHeight * grabRatio.y;
+  if (positionOffset) {
+    const range = positionOffset.targetWidth - positionOffset.startWidth;
+    const progress = range !== 0
+      ? clamp((animatedWidth - positionOffset.startWidth) / range, 0, 1)
+      : 1;
+    left += positionOffset.dx * (1 - progress);
+    top += positionOffset.dy * (1 - progress);
+  }
+  return { left, top };
+};
 
 const edgeSnapZoneFraction = 0.05;
 const ghostInsetPx = 8;

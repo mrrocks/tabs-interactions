@@ -50,7 +50,15 @@ import { spawnDetachedWindow, promotePanelToDetached } from './detachedWindowSpa
 import { settleDetachedDrag, settleAttachedDrag } from './dragCompletion';
 import {
   resolveEdgeSnapZone,
-  createEdgeSnapPreview
+  createEdgeSnapPreview,
+  snappedPanelFrames,
+  animatePanelToSnappedFrame,
+  unsnapThresholdPx,
+  unsnapSizeAnimationMs,
+  applyUnsnapResistance,
+  computeGrabRatio,
+  computeUnsnapPositionOffset,
+  blendUnsnapPosition
 } from '../panel/panelEdgeSnap';
 import {
   dragSourceClassName,
@@ -495,6 +503,97 @@ export const initializeTabDrag = ({
       }
     },
 
+    [DragPhase.unsnapResisting]: {
+      enter() {
+        const panel = ctx.currentTabList?.closest?.(panelSelector);
+        const preSnap = panel ? snappedPanelFrames.get(panel) : null;
+        const rect = panel.getBoundingClientRect();
+        ctx.unsnapState = {
+          panel,
+          preSnap,
+          snappedFrame: { width: rect.width, height: rect.height, left: rect.left, top: rect.top },
+          startX: ctx.lastClientX,
+          startY: ctx.lastClientY,
+          sizeAnimation: null,
+          rafId: null,
+          grabRatio: null,
+          positionOffset: null
+        };
+      },
+      frame(clientX, clientY) {
+        const s = ctx.unsnapState;
+        if (!s || s.sizeAnimation) return;
+
+        const dx = clientX - s.startX;
+        const dy = clientY - s.startY;
+
+        if (Math.hypot(dx, dy) < unsnapThresholdPx) {
+          const resistedLeft = s.snappedFrame.left + applyUnsnapResistance(dx);
+          const resistedTop = s.snappedFrame.top + applyUnsnapResistance(dy);
+          applyPanelFrame(s.panel, { ...s.snappedFrame, left: resistedLeft, top: resistedTop });
+          return;
+        }
+
+        const resistedLeft = s.snappedFrame.left + applyUnsnapResistance(dx);
+        const resistedTop = s.snappedFrame.top + applyUnsnapResistance(dy);
+        s.grabRatio = computeGrabRatio(s.startX, s.startY, s.snappedFrame);
+        const grabLeft = clientX - s.snappedFrame.width * s.grabRatio.x;
+        const grabTop = clientY - s.snappedFrame.height * s.grabRatio.y;
+        s.positionOffset = computeUnsnapPositionOffset(
+          resistedLeft, resistedTop, grabLeft, grabTop, s.snappedFrame.width, s.preSnap.width
+        );
+
+        s.panel.style.width = `${s.snappedFrame.width}px`;
+        s.panel.style.height = `${s.snappedFrame.height}px`;
+
+        s.sizeAnimation = s.panel.animate(
+          [
+            { width: `${s.snappedFrame.width}px`, height: `${s.snappedFrame.height}px` },
+            { width: `${s.preSnap.width}px`, height: `${s.preSnap.height}px` }
+          ],
+          { duration: scaleDurationMs(unsnapSizeAnimationMs), easing: 'ease-out', fill: 'forwards' }
+        );
+
+        const tickPosition = () => {
+          if (!s.sizeAnimation || !s.grabRatio) return;
+          const animRect = s.panel.getBoundingClientRect();
+          const { left, top } = blendUnsnapPosition(
+            ctx.lastClientX, ctx.lastClientY, s.grabRatio,
+            animRect.width, animRect.height, s.positionOffset
+          );
+          s.panel.style.left = `${left}px`;
+          s.panel.style.top = `${top}px`;
+          s.rafId = requestAnimationFrame(tickPosition);
+        };
+        s.rafId = requestAnimationFrame(tickPosition);
+
+        s.sizeAnimation.addEventListener('finish', () => {
+          if (s.rafId !== null) { cancelAnimationFrame(s.rafId); s.rafId = null; }
+          s.sizeAnimation.cancel();
+          s.sizeAnimation = null;
+          s.panel.style.width = `${s.preSnap.width}px`;
+          s.panel.style.height = `${s.preSnap.height}px`;
+          const px = ctx.lastClientX;
+          const py = ctx.lastClientY;
+          const finalLeft = px - s.preSnap.width * s.grabRatio.x;
+          const finalTop = py - s.preSnap.height * s.grabRatio.y;
+          applyPanelFrame(s.panel, { width: s.preSnap.width, height: s.preSnap.height, left: finalLeft, top: finalTop });
+          snappedPanelFrames.delete(s.panel);
+          ctx.unsnapState = null;
+          dragDomAdapter.applyDragStyles(ctx);
+          const wasActive = ctx.draggedTab.classList.contains(activeTabClassName);
+          if (ctx.dragProxy) {
+            applyProxyDetachedStyle(ctx.dragProxy, { isActive: wasActive });
+          }
+          promotePanelToDetached(ctx, spawnerDeps);
+          ctx.detachedPanelFrame = { width: s.preSnap.width, height: s.preSnap.height, left: finalLeft, top: finalTop };
+          ctx.detachedPointerOffset = { x: px - finalLeft, y: py - finalTop };
+          setPhase(DragPhase.detachedDragging);
+        });
+      },
+      exit() {}
+    },
+
     [DragPhase.reordering]: {
       enter() {},
       frame(clientX, clientY) {
@@ -746,21 +845,30 @@ export const initializeTabDrag = ({
     ctx.dragStarted = true;
     ctx.dragMoved = true;
 
-    dragDomAdapter.applyDragStyles(ctx);
-
-    if (ctx.dragProxy) {
-      applyProxyDetachedStyle(ctx.dragProxy, { isActive: wasActive });
-    }
-
     if (typeof document !== 'undefined' && document.body) {
       document.body.style.userSelect = 'none';
       document.body.classList.add(bodyDraggingClassName);
     }
 
+    const applyDragVisuals = () => {
+      dragDomAdapter.applyDragStyles(ctx);
+      if (ctx.dragProxy) {
+        applyProxyDetachedStyle(ctx.dragProxy, { isActive: wasActive });
+      }
+    };
+
     if (ctx.sourceTabCount <= 1) {
+      const panel = ctx.currentTabList?.closest?.(panelSelector);
+      const preSnap = panel ? snappedPanelFrames.get(panel) : null;
+      if (preSnap) {
+        setPhase(DragPhase.unsnapResisting);
+        return;
+      }
+      applyDragVisuals();
       promotePanelToDetached(ctx, spawnerDeps);
       setPhase(DragPhase.detachedDragging);
     } else {
+      applyDragVisuals();
       setPhase(DragPhase.reordering);
     }
   };
@@ -829,6 +937,19 @@ export const initializeTabDrag = ({
 
   const finishDrag = () => {
     if (!ctx) {
+      return;
+    }
+
+    if (ctx.phase === DragPhase.unsnapResisting && ctx.unsnapState) {
+      const s = ctx.unsnapState;
+      if (s.rafId !== null) { cancelAnimationFrame(s.rafId); s.rafId = null; }
+      if (s.sizeAnimation) {
+        s.sizeAnimation.finish();
+        return;
+      }
+      animatePanelToSnappedFrame(s.panel, s.snappedFrame);
+      ctx.unsnapState = null;
+      completeDrag();
       return;
     }
 

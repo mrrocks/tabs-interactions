@@ -4,6 +4,7 @@ export const DragPhase = Object.freeze({
   idle: 'idle',
   pressed: 'pressed',
   reordering: 'reordering',
+  unsnapResisting: 'unsnapResisting',
   detachIntent: 'detachIntent',
   detachedDragging: 'detachedDragging',
   hoverAttaching: 'hoverAttaching',
@@ -62,6 +63,7 @@ export const createDragContext = ({
   pendingDetachSpawn: false,
   detachWindowToggle: null,
   detachEdgeSnapPreview: null,
+  unsnapState: null,
 
   initialUserSelect,
   initialInlineStyles

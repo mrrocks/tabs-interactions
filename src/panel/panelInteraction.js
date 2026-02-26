@@ -10,19 +10,20 @@ import {
   computeSnappedFrame,
   createEdgeSnapPreview,
   animatePanelToSnappedFrame,
-  snappedPanelFrames
+  snappedPanelFrames,
+  unsnapThresholdPx,
+  unsnapSizeAnimationMs,
+  applyUnsnapResistance,
+  computeGrabRatio,
+  computeUnsnapPositionOffset,
+  blendUnsnapPosition
 } from './panelEdgeSnap';
 import { tabItemSelector, tabAddSelector, tabCloseSelector, windowControlsSelector } from '../shared/selectors';
 import { toFiniteNumber } from '../shared/math';
 import { createPointerFrameLoop } from '../shared/pointerFrameLoop';
 import { scaleDurationMs } from '../motion/motionSpeed';
-import { clamp } from '../shared/math';
 
 const resizeHitArea = 10;
-const unsnapThresholdPx = 220;
-const unsnapResistanceFactor = 0.2;
-const unsnapResistanceMaxPx = 35;
-const applyUnsnapResistance = (delta) => clamp(delta * unsnapResistanceFactor, -unsnapResistanceMaxPx, unsnapResistanceMaxPx);
 const grabCursor = 'grab';
 const grabbingCursor = 'grabbing';
 const panelSelector = '[data-resizable]';
@@ -46,44 +47,34 @@ export const initializePanelInteraction = (panel) => {
   let panelMinHeight = 0;
   let edgeSnapPreview = null;
   let pendingUnsnap = null;
-  let unsnapSizeAnimation = null;
-  let unsnapGrabRatio = null;
-  let unsnapPositionOffset = null;
+  let unsnapTransition = null;
   let lastPointer = null;
-  let unsnapRafId = null;
 
   const tickUnsnapPosition = () => {
-    if (!unsnapSizeAnimation || !unsnapGrabRatio || !lastPointer) return;
+    const t = unsnapTransition;
+    if (!t?.sizeAnimation || !t.grabRatio || !lastPointer) return;
     const animatedRect = panel.getBoundingClientRect();
-    const grabLeft = lastPointer.x - animatedRect.width * unsnapGrabRatio.x;
-    const grabTop = lastPointer.y - animatedRect.height * unsnapGrabRatio.y;
-
-    let left = grabLeft;
-    let top = grabTop;
-    if (unsnapPositionOffset) {
-      const widthRange = unsnapPositionOffset.targetWidth - unsnapPositionOffset.startWidth;
-      const progress = widthRange !== 0
-        ? clamp((animatedRect.width - unsnapPositionOffset.startWidth) / widthRange, 0, 1)
-        : 1;
-      left = grabLeft + unsnapPositionOffset.dx * (1 - progress);
-      top = grabTop + unsnapPositionOffset.dy * (1 - progress);
-    }
-
+    const { left, top } = blendUnsnapPosition(
+      lastPointer.x, lastPointer.y, t.grabRatio,
+      animatedRect.width, animatedRect.height, t.positionOffset
+    );
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
     panelFrame = { ...panelFrame, left, top };
-    unsnapRafId = requestAnimationFrame(tickUnsnapPosition);
+    t.rafId = requestAnimationFrame(tickUnsnapPosition);
   };
 
   const startUnsnapPositionLoop = () => {
     stopUnsnapPositionLoop();
-    unsnapRafId = requestAnimationFrame(tickUnsnapPosition);
+    if (unsnapTransition) {
+      unsnapTransition.rafId = requestAnimationFrame(tickUnsnapPosition);
+    }
   };
 
   const stopUnsnapPositionLoop = () => {
-    if (unsnapRafId !== null) {
-      cancelAnimationFrame(unsnapRafId);
-      unsnapRafId = null;
+    if (unsnapTransition?.rafId !== null) {
+      cancelAnimationFrame(unsnapTransition.rafId);
+      unsnapTransition.rafId = null;
     }
   };
 
@@ -115,7 +106,7 @@ export const initializePanelInteraction = (panel) => {
   const setPanelFrame = (nextFrame) => {
     const currentFrame = panelFrame;
 
-    if (!unsnapSizeAnimation) {
+    if (!unsnapTransition?.sizeAnimation) {
       if (!currentFrame || nextFrame.width !== currentFrame.width) {
         panel.style.width = `${nextFrame.width}px`;
       }
@@ -185,7 +176,7 @@ export const initializePanelInteraction = (panel) => {
         return;
       }
 
-      if (!unsnapSizeAnimation) {
+      if (!unsnapTransition?.sizeAnimation) {
         const draggedPos = getDraggedFrame({ ...interactionState, clientX, clientY });
         setPanelFrame({
           ...panelFrame,
@@ -228,48 +219,38 @@ export const initializePanelInteraction = (panel) => {
     const resistedLeft = snappedFrame.left + applyUnsnapResistance(dx);
     const resistedTop = snappedFrame.top + applyUnsnapResistance(dy);
 
-    const grabRatioX = (pendingUnsnap.startX - snappedFrame.left) / snappedFrame.width;
-    const grabRatioY = (pendingUnsnap.startY - snappedFrame.top) / snappedFrame.height;
-    unsnapGrabRatio = { x: grabRatioX, y: grabRatioY };
-
-    const grabLeft = clientX - snappedFrame.width * grabRatioX;
-    const grabTop = clientY - snappedFrame.height * grabRatioY;
-    unsnapPositionOffset = {
-      dx: resistedLeft - grabLeft,
-      dy: resistedTop - grabTop,
-      startWidth: snappedFrame.width,
-      targetWidth: preSnap.width
-    };
+    const grabRatio = computeGrabRatio(pendingUnsnap.startX, pendingUnsnap.startY, snappedFrame);
+    const grabLeft = clientX - snappedFrame.width * grabRatio.x;
+    const grabTop = clientY - snappedFrame.height * grabRatio.y;
+    const positionOffset = computeUnsnapPositionOffset(
+      resistedLeft, resistedTop, grabLeft, grabTop, snappedFrame.width, preSnap.width
+    );
 
     panel.style.width = `${snappedFrame.width}px`;
     panel.style.height = `${snappedFrame.height}px`;
 
-    unsnapSizeAnimation = panel.animate(
+    const sizeAnimation = panel.animate(
       [
         { width: `${snappedFrame.width}px`, height: `${snappedFrame.height}px` },
         { width: `${preSnap.width}px`, height: `${preSnap.height}px` }
       ],
-      { duration: scaleDurationMs(300), easing: 'ease-out', fill: 'forwards' }
+      { duration: scaleDurationMs(unsnapSizeAnimationMs), easing: 'ease-out', fill: 'forwards' }
     );
-    unsnapSizeAnimation.addEventListener('finish', () => {
+
+    unsnapTransition = { sizeAnimation, grabRatio, positionOffset, rafId: null };
+
+    sizeAnimation.addEventListener('finish', () => {
       stopUnsnapPositionLoop();
-      unsnapSizeAnimation.cancel();
-      unsnapSizeAnimation = null;
-      unsnapGrabRatio = null;
-      unsnapPositionOffset = null;
+      sizeAnimation.cancel();
+      unsnapTransition = null;
       panel.style.width = `${preSnap.width}px`;
       panel.style.height = `${preSnap.height}px`;
       const currentPointer = lastPointer || { x: clientX, y: clientY };
-      const finalLeft = currentPointer.x - preSnap.width * grabRatioX;
-      const finalTop = currentPointer.y - preSnap.height * grabRatioY;
+      const finalLeft = currentPointer.x - preSnap.width * grabRatio.x;
+      const finalTop = currentPointer.y - preSnap.height * grabRatio.y;
       panel.style.left = `${finalLeft}px`;
       panel.style.top = `${finalTop}px`;
-      panelFrame = {
-        width: preSnap.width,
-        height: preSnap.height,
-        left: finalLeft,
-        top: finalTop
-      };
+      panelFrame = { width: preSnap.width, height: preSnap.height, left: finalLeft, top: finalTop };
       interactionState = {
         ...interactionState,
         startWidth: preSnap.width,
@@ -282,12 +263,7 @@ export const initializePanelInteraction = (panel) => {
     });
 
     snappedPanelFrames.delete(panel);
-    setPanelFrame({
-      width: snappedFrame.width,
-      height: snappedFrame.height,
-      left: resistedLeft,
-      top: resistedTop
-    });
+    setPanelFrame({ width: snappedFrame.width, height: snappedFrame.height, left: resistedLeft, top: resistedTop });
     interactionState = {
       ...interactionState,
       startX: clientX,
@@ -332,8 +308,8 @@ export const initializePanelInteraction = (panel) => {
       });
     }
 
-    if (unsnapSizeAnimation) {
-      unsnapSizeAnimation.finish();
+    if (unsnapTransition?.sizeAnimation) {
+      unsnapTransition.sizeAnimation.finish();
     }
 
     const wasDrag = interactionState.mode === 'drag';
