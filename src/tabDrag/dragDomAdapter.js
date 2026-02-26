@@ -6,7 +6,8 @@ import {
   activeDragClassName,
   inactiveDragClassName,
   dragSourceClassName,
-  dragProxyClassName
+  dragProxyClassName,
+  noTransitionClassName
 } from './dragClassNames';
 import { setFlexLock, restoreDragInlineStyles } from './styleHelpers';
 
@@ -95,8 +96,18 @@ export const createDragDomAdapter = () => {
 
   const restoreDraggedTabStyles = (dragState) => {
     const { draggedTab, initialInlineStyles } = dragState;
-    draggedTab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
-    restoreDragInlineStyles(draggedTab, initialInlineStyles);
+    const isInactive = !draggedTab.classList.contains(activeTabClassName);
+
+    if (isInactive) {
+      draggedTab.classList.add(noTransitionClassName, inactiveDragClassName);
+      draggedTab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName);
+      restoreDragInlineStyles(draggedTab, initialInlineStyles);
+      draggedTab.getBoundingClientRect();
+      draggedTab.classList.remove(noTransitionClassName, inactiveDragClassName);
+    } else {
+      draggedTab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
+      restoreDragInlineStyles(draggedTab, initialInlineStyles);
+    }
   };
 
   const rebaseDragVisualAtPointer = (dragState, clientX, clientY) => {

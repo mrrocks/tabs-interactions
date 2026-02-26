@@ -93,7 +93,8 @@ export const applyProxyDetachedStyle = (proxy, { isActive, durationMs, cancelExi
 export const applyProxyAttachedStyle = (proxy, { isActive, durationMs, cancelExisting } = {}) => {
   if (cancelExisting) cancelProxySubAnimations(proxy);
   const d = durationMs ?? scaleDurationMs(dragTransitionDurationMs);
-  animateCornerClipIn(proxy, { durationMs: d, fill: 'forwards' });
+  const cornerDelay = Math.round(d * 0.3);
+  animateCornerClipIn(proxy, { durationMs: d, delay: cornerDelay, fill: 'forwards' });
   animateBackgroundRadiusToAttached(proxy, { durationMs: d, fill: 'forwards' });
   animateDragShadowOut(proxy, {
     durationMs: durationMs ?? scaleDurationMs(dragShadowOutDurationMs),

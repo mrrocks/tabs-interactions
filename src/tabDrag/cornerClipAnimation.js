@@ -38,13 +38,13 @@ const safeAnimate = (element, keyframes, options) => {
   }
 };
 
-export const animateCornerClipIn = (tab, { durationMs, easing = dragTransitionEasing, fill = 'none' } = {}) => {
+export const animateCornerClipIn = (tab, { durationMs, delay = 0, easing = dragTransitionEasing, fill = 'none' } = {}) => {
   const corners = resolveCorners(tab);
   if (!corners) {
     return [];
   }
 
-  const options = { duration: durationMs, easing, fill };
+  const options = { duration: durationMs, delay, easing, fill };
   return [
     safeAnimate(corners.left, [{ transform: TRANSLATE_HIDDEN_LEFT, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options),
     safeAnimate(corners.right, [{ transform: TRANSLATE_HIDDEN_RIGHT, opacity: 0 }, { transform: TRANSLATE_VISIBLE, opacity: 1 }], options)
