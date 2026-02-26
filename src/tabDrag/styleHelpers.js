@@ -74,7 +74,7 @@ const commitAndCancelAnimations = (el) => {
   }
 };
 
-const cancelProxySubAnimations = (proxy) => {
+export const cancelProxySubAnimations = (proxy) => {
   for (const sel of STYLE_SUB_SELECTORS) {
     commitAndCancelAnimations(proxy.querySelector?.(sel));
   }
@@ -115,10 +115,4 @@ export const animateProxyActivation = (proxy) => {
     ],
     { duration: d, easing: 'ease', fill: 'forwards' }
   );
-};
-
-export const applyTabAttachedStyle = (tab, { durationMs } = {}) => {
-  const d = durationMs ?? scaleDurationMs(dragTransitionDurationMs);
-  animateCornerClipIn(tab, { durationMs: d });
-  animateBackgroundRadiusToAttached(tab, { durationMs: d });
 };

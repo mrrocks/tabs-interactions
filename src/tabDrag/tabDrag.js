@@ -61,6 +61,8 @@ import {
   blendUnsnapPosition
 } from '../panel/panelEdgeSnap';
 import {
+  activeDragClassName,
+  inactiveDragClassName,
   dragSourceClassName,
   dragHoverPreviewClassName,
   bodyDraggingClassName
@@ -241,16 +243,6 @@ export const initializeTabDrag = ({
     state.proxyFadingOut = false;
   };
 
-  const parkProxyWithOffset = (state, clientX, clientY) => {
-    parkProxy(state);
-    if (state.detachedPanelFrame) {
-      state.detachedPointerOffset = {
-        x: clientX - state.detachedPanelFrame.left,
-        y: clientY - state.detachedPanelFrame.top
-      };
-    }
-  };
-
   const restoreParkedProxy = (state, clientX, clientY) => {
     const proxy = state.dragProxy;
     if (!proxy) return;
@@ -270,6 +262,9 @@ export const initializeTabDrag = ({
 
   const unparkProxy = (state, clientX, clientY) => {
     restoreParkedProxy(state, clientX, clientY);
+
+    state.dragProxy.classList.remove(inactiveDragClassName);
+    state.dragProxy.classList.add(activeDragClassName);
 
     const durationMs = scaleDurationMs(dragTransitionDurationMs);
     applyProxyDetachedStyle(state.dragProxy, { isActive: true, durationMs });
@@ -318,7 +313,6 @@ export const initializeTabDrag = ({
     placeholderManager,
     visualWidth,
     fadeOutProxy,
-    parkProxyWithOffset,
     parkProxy,
     getCtx: () => ctx
   };
@@ -751,7 +745,6 @@ export const initializeTabDrag = ({
 
           if (didAttach && !hadHoverPresence) {
             if (wasParked) {
-              restoreParkedProxy(ctx, clientX, clientY);
               applyProxyDetachedStyle(ctx.dragProxy, { isActive: true });
             }
             enterHoverAttach(clientX, clientY);

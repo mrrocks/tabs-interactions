@@ -6,8 +6,7 @@ import {
   activeDragClassName,
   inactiveDragClassName,
   dragSourceClassName,
-  dragProxyClassName,
-  noTransitionClassName
+  dragProxyClassName
 } from './dragClassNames';
 import { setFlexLock, restoreDragInlineStyles } from './styleHelpers';
 
@@ -20,6 +19,15 @@ export const createDragDomAdapter = () => {
     element.style.transform = `translate3d(${translateX}px, ${translateY}px, 0px)`;
   };
 
+  const applyProxyRect = (proxy, rect) => {
+    proxy.style.left = `${rect.left}px`;
+    proxy.style.top = `${rect.top}px`;
+    proxy.style.width = `${rect.width}px`;
+    proxy.style.height = `${rect.height}px`;
+    proxy.style.minWidth = `${rect.width}px`;
+    proxy.style.maxWidth = `${rect.width}px`;
+  };
+
   const createDragProxy = (draggedTab) => {
     if (typeof document === 'undefined' || !document.body || typeof draggedTab.cloneNode !== 'function') {
       return null;
@@ -29,12 +37,7 @@ export const createDragDomAdapter = () => {
     const dragProxy = draggedTab.cloneNode(true);
     const isActive = draggedTab.classList.contains(activeTabClassName);
     dragProxy.classList.add(dragProxyClassName, dragClassName, isActive ? activeDragClassName : inactiveDragClassName);
-    dragProxy.style.left = `${draggedRect.left}px`;
-    dragProxy.style.top = `${draggedRect.top}px`;
-    dragProxy.style.width = `${draggedRect.width}px`;
-    dragProxy.style.height = `${draggedRect.height}px`;
-    dragProxy.style.minWidth = `${draggedRect.width}px`;
-    dragProxy.style.maxWidth = `${draggedRect.width}px`;
+    applyProxyRect(dragProxy, draggedRect);
     dragProxy.style.transform = 'translate3d(0px, 0px, 0px)';
     dragProxy.style.willChange = 'transform';
     dragProxy.style.zIndex = String(getOverlayZIndex());
@@ -57,12 +60,7 @@ export const createDragDomAdapter = () => {
 
     const snapshot = toRectSnapshot(rect);
     dragState.dragProxyBaseRect = snapshot;
-    dragState.dragProxy.style.left = `${snapshot.left}px`;
-    dragState.dragProxy.style.top = `${snapshot.top}px`;
-    dragState.dragProxy.style.width = `${snapshot.width}px`;
-    dragState.dragProxy.style.height = `${snapshot.height}px`;
-    dragState.dragProxy.style.minWidth = `${snapshot.width}px`;
-    dragState.dragProxy.style.maxWidth = `${snapshot.width}px`;
+    applyProxyRect(dragState.dragProxy, snapshot);
   };
 
   const setDragVisualTransform = (dragState, translateX, translateY) => {
@@ -97,24 +95,8 @@ export const createDragDomAdapter = () => {
 
   const restoreDraggedTabStyles = (dragState) => {
     const { draggedTab, initialInlineStyles } = dragState;
-    const isInactive = !draggedTab.classList.contains(activeTabClassName);
-    const hadProxy = Boolean(dragState.dragProxy);
-
-    draggedTab.classList.remove(dragSourceClassName, dragClassName);
+    draggedTab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
     restoreDragInlineStyles(draggedTab, initialInlineStyles);
-
-    if (hadProxy && isInactive) {
-      draggedTab.classList.add(noTransitionClassName, inactiveDragClassName);
-      draggedTab.getBoundingClientRect();
-      draggedTab.classList.remove(noTransitionClassName);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          draggedTab.classList.remove(inactiveDragClassName);
-        });
-      });
-    } else {
-      draggedTab.classList.remove(activeDragClassName, inactiveDragClassName);
-    }
   };
 
   const rebaseDragVisualAtPointer = (dragState, clientX, clientY) => {
@@ -122,13 +104,7 @@ export const createDragDomAdapter = () => {
     dragState.startY = clientY;
 
     if (dragState.dragProxy) {
-      const proxyRect = dragState.dragProxy.getBoundingClientRect();
-      setDragProxyBaseRect(dragState, {
-        left: proxyRect.left,
-        top: proxyRect.top,
-        width: proxyRect.width,
-        height: proxyRect.height
-      });
+      setDragProxyBaseRect(dragState, dragState.dragProxy.getBoundingClientRect());
     }
 
     setDragVisualTransform(dragState, 0, 0);

@@ -1,4 +1,4 @@
-import { toRectSnapshot } from '../shared/dom';
+import { toRectSnapshot, onAnimationSettled } from '../shared/dom';
 import { panelSelector } from '../shared/selectors';
 import { activeTabClassName } from '../tabs/tabState';
 import { getTabs, setActiveTab } from '../tabs/tabs';
@@ -11,7 +11,12 @@ import {
   shouldRemoveSourceWindowOnDetach,
   resolveSourceActivationIndexAfterDetach
 } from './dragCalculations';
-import { clearDragInlineStyles, applyProxyAttachedStyle, animateProxyActivation } from './styleHelpers';
+import {
+  clearDragInlineStyles,
+  applyProxyAttachedStyle,
+  animateProxyActivation,
+  cancelProxySubAnimations
+} from './styleHelpers';
 import {
   dragClassName,
   activeDragClassName,
@@ -43,7 +48,7 @@ export const spawnDetachedWindow = (ctx, deps) => {
 
   const { scaleDurationMs, initializePanelInteraction, initializeTabList,
     dragDomAdapter, hoverPreview, placeholderManager, visualWidth,
-    fadeOutProxy, parkProxyWithOffset, getCtx } = deps;
+    fadeOutProxy, getCtx } = deps;
 
   const sourceTabList = ctx.currentTabList;
   const sourcePanel =
@@ -77,16 +82,43 @@ export const spawnDetachedWindow = (ctx, deps) => {
   const onScaleInComplete = () => {
     scaleInCompleted = true;
     clearTimeout(scaleInFallbackId);
-    tab.style.visibility = '';
+
     const liveCtx = getCtx();
     if (!liveCtx || liveCtx.dragProxy !== proxy) {
+      tab.style.visibility = '';
       dragDomAdapter.removeDragProxy(proxy);
       return;
     }
     if (liveCtx.proxyParked || hoverPreview.previewTabList != null) {
       return;
     }
-    fadeOutProxy(liveCtx, liveCtx.lastClientX, liveCtx.lastClientY);
+
+    const wasInactive = proxy.classList.contains(inactiveDragClassName);
+    cancelProxySubAnimations(proxy);
+    const activationAnim = wasInactive ? animateProxyActivation(proxy) : null;
+    applyProxyAttachedStyle(proxy, { isActive: true });
+
+    const swapAndPark = () => {
+      const currentCtx = getCtx();
+      tab.style.visibility = '';
+      if (!currentCtx || currentCtx.dragProxy !== proxy) {
+        dragDomAdapter.removeDragProxy(proxy);
+        return;
+      }
+      if (currentCtx.proxyParked || hoverPreview.previewTabList != null) {
+        return;
+      }
+      fadeOutProxy(currentCtx, currentCtx.lastClientX, currentCtx.lastClientY);
+    };
+
+    const morphAnim = activationAnim
+      ?? proxy.querySelector('.tab--background')?.getAnimations?.()[0]
+      ?? null;
+    if (morphAnim) {
+      onAnimationSettled(morphAnim, swapAndPark);
+    } else {
+      swapAndPark();
+    }
   };
 
   const scaleInFallbackId = setTimeout(() => {
@@ -103,21 +135,6 @@ export const spawnDetachedWindow = (ctx, deps) => {
       tab.classList.remove(dragSourceClassName, dragClassName, activeDragClassName, inactiveDragClassName);
       clearDragInlineStyles(tab);
       tab.style.visibility = 'hidden';
-      if (proxy) {
-        const wasInactive = proxy.classList.contains(inactiveDragClassName);
-        if (wasInactive) {
-          const anim = animateProxyActivation(proxy);
-          proxy.classList.add(activeDragClassName);
-          anim?.finished?.then(() => {
-            proxy.classList.remove(inactiveDragClassName);
-          }).catch(() => {
-            proxy.classList.remove(inactiveDragClassName);
-          });
-        } else {
-          proxy.classList.add(activeDragClassName);
-        }
-        applyProxyAttachedStyle(proxy, { isActive: true });
-      }
       tab.getBoundingClientRect();
       tab.classList.remove(noTransitionClassName);
       setActiveTab(detachedWindow.tabList, 0);

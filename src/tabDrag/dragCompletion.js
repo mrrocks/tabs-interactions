@@ -1,7 +1,6 @@
 import { toRectSnapshot } from '../shared/dom';
 import { scaleDurationMs } from '../motion/motionSpeed';
 import { panelSelector } from '../shared/selectors';
-import { activeTabClassName } from '../tabs/tabState';
 import { getTabs } from '../tabs/tabs';
 import { animatedRemovePanel, removePanel } from '../window/windowManager';
 import { signalDragCompleted } from '../tabs/tabDragSignal';
@@ -16,7 +15,7 @@ import {
 } from './dragCalculations';
 import { animateDragShadowOut } from './dragShadowAnimation';
 import { dragTransitionDurationMs, dragShadowOutDurationMs, dragTransitionEasing } from './dragAnimationConfig';
-import { applyTabAttachedStyle, applyProxyAttachedStyle, clearFlexLock, FLEX_LOCK_KEYS } from './styleHelpers';
+import { applyProxyAttachedStyle, clearFlexLock, FLEX_LOCK_KEYS } from './styleHelpers';
 import { captureSourceActivation } from './detachedWindowSpawner';
 import {
   computeSnappedFrame,
@@ -168,10 +167,6 @@ export const settleAttachedDrag = (completedState, deps) => {
     const displacements = computeDisplacements(siblings, snapshot);
     if (displacements.length > 0) {
       animationCoordinator.animateSiblingDisplacement(displacements);
-    }
-
-    if (tab.classList.contains(activeTabClassName)) {
-      applyTabAttachedStyle(tab);
     }
   };
 
