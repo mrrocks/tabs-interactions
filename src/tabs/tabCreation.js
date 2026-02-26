@@ -203,9 +203,9 @@ const closeTab = (tabList, tab) => {
   if (closingTabs.has(tab)) return;
   if (isPinned(tab)) return;
 
-  const tabs = getTabs(tabList);
+  const liveTabs = getTabs(tabList).filter((t) => !closingTabs.has(t));
 
-  if (tabs.length <= 1) {
+  if (liveTabs.length <= 1) {
     const panel = tabList.closest(panelSelector);
     if (panel) {
       animatedRemovePanel(panel, { anchor: tab.querySelector(tabCloseSelector) });
@@ -214,12 +214,14 @@ const closeTab = (tabList, tab) => {
   }
 
   closingTabs.add(tab);
-  const closingIndex = tabs.indexOf(tab);
   const wasActive = tab.classList.contains(activeTabClassName);
 
   if (wasActive) {
-    const nextIndex = closingIndex < tabs.length - 1 ? closingIndex + 1 : closingIndex - 1;
-    setActiveTab(tabList, nextIndex);
+    const candidates = liveTabs.filter((t) => t !== tab);
+    const closingIndex = liveTabs.indexOf(tab);
+    const nextIndex = closingIndex < liveTabs.length - 1 ? closingIndex : closingIndex - 1;
+    const nextTab = candidates[Math.min(nextIndex, candidates.length - 1)];
+    setActiveTab(tabList, getTabs(tabList).indexOf(nextTab));
     tab.classList.remove(inactiveTabClassName);
     tab.classList.add(activeTabClassName);
   }

@@ -34,11 +34,18 @@ const getIconUrl = (content) => content.icon || getFallbackIconUrl(content.domai
 
 const preloadedImages = new Map();
 
+const preloadAndDecode = (url) => {
+  if (preloadedImages.has(url)) return;
+  const img = new Image();
+  img.src = url;
+  img.decode().catch(() => {});
+  preloadedImages.set(url, img);
+};
+
 if (typeof Image !== 'undefined') {
   sampleTabContents.forEach((content) => {
-    const img = new Image();
-    img.src = getIconUrl(content);
-    preloadedImages.set(img.src, img);
+    preloadAndDecode(getIconUrl(content));
+    if (content.icon) preloadAndDecode(getFallbackIconUrl(content.domain));
   });
 }
 
@@ -59,23 +66,36 @@ const setFaviconBackground = (faviconElement, url) => {
   faviconElement.style.background = `url('${url}') center / contain no-repeat transparent`;
 };
 
-const ensureDecoded = (url) => {
+const isDecodedSync = (url) => {
   const cached = preloadedImages.get(url);
-  if (cached?.complete && cached.naturalWidth > 0) return Promise.resolve(url);
+  if (cached) return cached.complete && cached.naturalWidth > 0;
+  const probe = new Image();
+  probe.src = url;
+  return probe.complete && probe.naturalWidth > 0;
+};
 
-  const img = new Image();
-  img.src = url;
-  if (img.complete && img.naturalWidth > 0) return Promise.resolve(url);
-
+const decodeAsync = (url) => {
+  const img = preloadedImages.get(url) ?? new Image();
+  if (!img.src) img.src = url;
   return img.decode().then(() => url);
 };
 
 const loadFavicon = (faviconElement, iconUrl, fallbackUrl) => {
   faviconElement.textContent = '';
 
-  return ensureDecoded(iconUrl)
+  if (isDecodedSync(iconUrl)) {
+    setFaviconBackground(faviconElement, iconUrl);
+    return null;
+  }
+
+  if (fallbackUrl && fallbackUrl !== iconUrl && isDecodedSync(fallbackUrl)) {
+    setFaviconBackground(faviconElement, fallbackUrl);
+    return null;
+  }
+
+  return decodeAsync(iconUrl)
     .catch(() => fallbackUrl && fallbackUrl !== iconUrl
-      ? ensureDecoded(fallbackUrl)
+      ? decodeAsync(fallbackUrl)
       : iconUrl
     )
     .catch(() => iconUrl)
