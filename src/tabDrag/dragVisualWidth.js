@@ -245,8 +245,9 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
 
     const preview = outgoingPreviewTab;
     const anim = outgoingAnimation;
-
-    const currentWidth = toFiniteNumber(preview.getBoundingClientRect?.().width, 0);
+    const reclaimWidthPx = outgoingStartWidthPx > 0
+      ? outgoingStartWidthPx
+      : toFiniteNumber(preview.getBoundingClientRect?.().width, 0);
 
     reclaimedPreviews.add(preview);
     clearOutgoing();
@@ -255,12 +256,12 @@ export const createDragVisualWidthManager = ({ scaleDurationMs, hoverPreviewExpa
       anim.cancel();
     }
 
-    if (currentWidth > 0) {
-      preview.style.minWidth = `${currentWidth}px`;
-      preview.style.maxWidth = `${currentWidth}px`;
+    if (reclaimWidthPx > 0) {
+      preview.style.minWidth = `${reclaimWidthPx}px`;
+      preview.style.maxWidth = `${reclaimWidthPx}px`;
     }
 
-    return { previewTab: preview, currentWidthPx: currentWidth };
+    return { previewTab: preview, currentWidthPx: reclaimWidthPx };
   };
 
   const syncWidth = (session, previewTab) => {

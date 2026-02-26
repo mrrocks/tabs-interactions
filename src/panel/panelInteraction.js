@@ -50,6 +50,42 @@ export const initializePanelInteraction = (panel) => {
   let unsnapGrabRatio = null;
   let unsnapPositionOffset = null;
   let lastPointer = null;
+  let unsnapRafId = null;
+
+  const tickUnsnapPosition = () => {
+    if (!unsnapSizeAnimation || !unsnapGrabRatio || !lastPointer) return;
+    const animatedRect = panel.getBoundingClientRect();
+    const grabLeft = lastPointer.x - animatedRect.width * unsnapGrabRatio.x;
+    const grabTop = lastPointer.y - animatedRect.height * unsnapGrabRatio.y;
+
+    let left = grabLeft;
+    let top = grabTop;
+    if (unsnapPositionOffset) {
+      const widthRange = unsnapPositionOffset.targetWidth - unsnapPositionOffset.startWidth;
+      const progress = widthRange !== 0
+        ? clamp((animatedRect.width - unsnapPositionOffset.startWidth) / widthRange, 0, 1)
+        : 1;
+      left = grabLeft + unsnapPositionOffset.dx * (1 - progress);
+      top = grabTop + unsnapPositionOffset.dy * (1 - progress);
+    }
+
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panelFrame = { ...panelFrame, left, top };
+    unsnapRafId = requestAnimationFrame(tickUnsnapPosition);
+  };
+
+  const startUnsnapPositionLoop = () => {
+    stopUnsnapPositionLoop();
+    unsnapRafId = requestAnimationFrame(tickUnsnapPosition);
+  };
+
+  const stopUnsnapPositionLoop = () => {
+    if (unsnapRafId !== null) {
+      cancelAnimationFrame(unsnapRafId);
+      unsnapRafId = null;
+    }
+  };
 
   const setCursor = (nextCursor) => {
     if (activeCursor === nextCursor) {
@@ -149,30 +185,13 @@ export const initializePanelInteraction = (panel) => {
         return;
       }
 
-      const draggedPos = getDraggedFrame({ ...interactionState, clientX, clientY });
-
-      if (unsnapSizeAnimation && unsnapGrabRatio) {
-        const animatedRect = panel.getBoundingClientRect();
-        const grabLeft = clientX - animatedRect.width * unsnapGrabRatio.x;
-        const grabTop = clientY - animatedRect.height * unsnapGrabRatio.y;
-
-        if (unsnapPositionOffset) {
-          const widthRange = unsnapPositionOffset.targetWidth - unsnapPositionOffset.startWidth;
-          const progress = widthRange !== 0
-            ? clamp((animatedRect.width - unsnapPositionOffset.startWidth) / widthRange, 0, 1)
-            : 1;
-          draggedPos.left = grabLeft + unsnapPositionOffset.dx * (1 - progress);
-          draggedPos.top = grabTop + unsnapPositionOffset.dy * (1 - progress);
-        } else {
-          draggedPos.left = grabLeft;
-          draggedPos.top = grabTop;
-        }
+      if (!unsnapSizeAnimation) {
+        const draggedPos = getDraggedFrame({ ...interactionState, clientX, clientY });
+        setPanelFrame({
+          ...panelFrame,
+          ...draggedPos
+        });
       }
-
-      setPanelFrame({
-        ...panelFrame,
-        ...draggedPos
-      });
 
       const snapZone = resolveEdgeSnapZone(clientX, window.innerWidth);
       if (snapZone) {
@@ -233,6 +252,7 @@ export const initializePanelInteraction = (panel) => {
       { duration: scaleDurationMs(300), easing: 'ease-out', fill: 'forwards' }
     );
     unsnapSizeAnimation.addEventListener('finish', () => {
+      stopUnsnapPositionLoop();
       unsnapSizeAnimation.cancel();
       unsnapSizeAnimation = null;
       unsnapGrabRatio = null;
@@ -278,6 +298,7 @@ export const initializePanelInteraction = (panel) => {
       startTop: resistedTop
     };
     pendingUnsnap = null;
+    startUnsnapPositionLoop();
   };
 
   const onPointerMove = (event) => {
